@@ -7,7 +7,6 @@ class GlobalSettings:
 
     """
 
-
     datafile = None
     coordinates_datafile = None
     label_datafile = None

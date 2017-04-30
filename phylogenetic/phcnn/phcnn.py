@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from keras import backend as K
+from keras.engine.topology import Layer
 import numpy as np
 from sklearn.metrics.pairwise import euclidean_distances
 
 from .globalsettings import GlobalSettings
 from .utils import load_datafile
-
 
 def get_data(datafile, labels_datafile, coordinates_datafile):
 
@@ -27,17 +28,18 @@ def get_data(datafile, labels_datafile, coordinates_datafile):
     ys = np.loadtxt(labels_datafile, dtype=np.int)
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
 
-    return { 'feature_names': feature_names,
-             'sample_names': sample_names,
-             'xs': np.copy(xs),
-             'ys': np.copy(ys),
-             'coordinate_names': coordinate_names,
-             'coordinates': coordinates
-           }
+    return {'feature_names': feature_names,
+            'sample_names': sample_names,
+            'xs': np.copy(xs),
+            'ys': np.copy(ys),
+            'coordinate_names': coordinate_names,
+            'coordinates': coordinates,
+            'number_of_samples': xs.shape[0],
+            'number_of_features': xs.shape[1]
+            }
 
 
 def phyloneighbors(xs, coordinates, k):
-
     """   
     :param xs: numpy array with shape (number of samples, number of features) where xs[i,j] is the jth feature of the
                ith sample.
@@ -71,3 +73,14 @@ def phyloneighbors(xs, coordinates, k):
 
     return np.reshape(output, (number_of_samples, 1, 1, output.shape[1]))
 
+
+def data():
+    """
+    Data providing function required by hyperas:
+
+    This function is separated from model() so that hyperopt
+    won't reload data for each evaluation run.
+    """
+    return get_data(GlobalSettings.datafile,
+                    GlobalSettings.labels_datafile,
+                    GlobalSettings.coordinates_datafile)
