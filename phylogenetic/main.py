@@ -8,6 +8,7 @@ from phcnn.parser import create_parser
 from phcnn.globalsettings import GlobalSettings
 import phcnn.phcnn as phcnn
 
+
 def main():
 
     parser = create_parser()

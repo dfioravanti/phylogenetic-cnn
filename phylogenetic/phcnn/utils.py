@@ -2,6 +2,7 @@
 import csv
 import numpy as np
 
+
 def load_datafile(filename, dtype=np.float):
 
     """
