@@ -8,13 +8,15 @@ from keras.optimizers import SGD, RMSprop, Adam
 import numpy as np
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn import preprocessing
+from sklearn.feature_selection import SelectKBest, f_classif
 
 from .globalsettings import GlobalSettings
 from .utils import load_datafile
 from .scaling import norm_l2
+from .relief import ReliefF
 
 
-def __prepare_output_array(cv_k, cv_n, number_of_features, number_of_samples):
+def _prepare_output_array(cv_k, cv_n, number_of_features, number_of_samples):
     total_number_iterations = cv_k * cv_n
 
     output = {
@@ -41,17 +43,13 @@ def __prepare_output_array(cv_k, cv_n, number_of_features, number_of_samples):
     return output
 
 
-class OptimizerNotFound(Exception):
+class _OptimizerNotFound(Exception):
     pass
 
 
-class ScalingNotFound(Exception):
-    pass
-
-
-def __configure_optimizer(selected_optimizer):
+def _configure_optimizer(selected_optimizer):
     """
-    Configure a optimizer. It raise an exception if a wrong optimizer name is passed.
+    Configure a optimizer. It raises an exception if a wrong optimizer name is required.
 
     :param selected_optimizer: string containing the name of the optimizer that we want to configure 
     :return: The optimizer and a dictionary containing the name and the parameter of the optimizer 
@@ -90,40 +88,77 @@ def __configure_optimizer(selected_optimizer):
                                    'decay': decay,
                                    'nesterov': nesterov}
     else:
-        raise OptimizerNotFound("The only supported optimizer are adam, rmsprop, sgd")
+        raise _OptimizerNotFound("The only supported optimizer are adam, rmsprop, sgd")
 
     return optimizer, optimizer_configuration
 
 
-def __apply_scaling(xs_train, xs_test, selected_scaling):
+class _ScalingNotFound(Exception):
+    pass
+
+
+def _apply_scaling(xs_training, xs_test, selected_scaling):
     """
     Apply the scaling to the input data AFTER they have been divided in 
-    (training, testing) during a cross validation. It raise an exception 
-    if a wrong scaler name is passed.
-    :param xs_train: Training data
+    (training, testing) during a cross validation. It raises an exception 
+    if a wrong scaler name is required.
+    :param xs_training: Training data
     :param xs_test: Test data
     :param selected_scaling: a string representing the select scaling
     :return: (xs_training, xs_test) scaled according to the scaler. 
     """
     if selected_scaling == 'norm_l2':
-        xs_train_scaled, m_train, r_train = norm_l2(xs_train)
+        xs_train_scaled, m_train, r_train = norm_l2(xs_training)
         xs_test_scaled, _, _ = norm_l2(xs_test, m_train, r_train)
     elif selected_scaling == 'std':
         scaler = preprocessing.StandardScaler(copy=False)
-        xs_train_scaled = scaler.fit_transform(xs_train)
+        xs_train_scaled = scaler.fit_transform(xs_training)
         xs_test_scaled = scaler.transform(xs_test)
     elif selected_scaling == 'minmax':
         scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1), copy=False)
-        xs_train_scaled = scaler.fit_transform(xs_train)
+        xs_train_scaled = scaler.fit_transform(xs_training)
         xs_test_scaled = scaler.transform(xs_test)
     elif selected_scaling == 'minmax0':
         scaler = preprocessing.MinMaxScaler(feature_range=(0, 1), copy=False)
-        xs_train_scaled = scaler.fit_transform(xs_train)
+        xs_train_scaled = scaler.fit_transform(xs_training)
         xs_test_scaled = scaler.transform(xs_test)
     else:
-        raise ScalingNotFound("The only supported scaling are norm_l2, std, minmax, minmax0")
+        raise _ScalingNotFound("The only supported scaling are norm_l2, std, minmax, minmax0")
 
     return xs_train_scaled, xs_test_scaled
+
+
+class _RankingNotFound(Exception):
+    pass
+
+
+def _get_ranking(xs_training, ys_training, rank_method='ReliefF'):
+    """
+    Compute the ranking of the features as required. It raises an exception 
+    if a wrong rank_method name is required.  
+    
+    :param xs_training: Training data of shape (number of training samples, number of features)
+    :param ys_training: Training labels
+    :param rank_method: a string representing the selected rank method
+    :return: 
+    """
+    if rank_method == 'random':
+        ranking = np.arange(xs_training.shape[1])
+        # np.random.seed((n * CV_K) + i) #TODO: Find out why this was here
+        np.random.shuffle(ranking)
+    elif rank_method == 'ReliefF':
+        relief = ReliefF(relief_k, seed=n)
+        relief.learn(xs_training, ys_training)
+        w = relief.w()
+        ranking = np.argsort(w)[::-1]
+    elif rank_method == 'KBest':
+        selector = SelectKBest(f_classif)
+        selector.fit(xs_training, ys_training)
+        ranking = np.argsort(-np.log10(selector.pvalues_))[::-1]
+    else:
+        raise _RankingNotFound("The only supported Ranking are random, ReliefF, KBest")
+
+    return ranking
 
 
 def get_data(datafile, labels_datafile, coordinates_datafile):
