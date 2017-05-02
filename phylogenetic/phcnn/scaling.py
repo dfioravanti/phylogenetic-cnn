@@ -2,6 +2,7 @@
 # 2013-11-21: [AZ] added scaling method norm L2
 import numpy as np
 
+
 def minmax_scaling(x, m=None, r=None):
     """
     m: midrange
@@ -16,7 +17,6 @@ def minmax_scaling(x, m=None, r=None):
     if r is None:
         r = xmax - xmin
 
-    #with np.errstate(divide='ignore'):
     np.seterr(divide='ignore')
     ret = (x-m)/(r/2)
         
@@ -35,7 +35,6 @@ def standardize(x, m=None, r=None):
     if r is None:
         r = np.std(x, axis=0, ddof=1)
 
-    #with np.errstate(divide='ignore'):
     np.seterr(divide='ignore', invalid='ignore')
     ret = (x-m)/r
      
@@ -43,7 +42,7 @@ def standardize(x, m=None, r=None):
     return ret, m, r
 
 
-def norm_l2(x, m = None, r = None):
+def norm_l2(x, m=None, r=None):
     """
     m: midrange
     r: range
@@ -58,11 +57,9 @@ def norm_l2(x, m = None, r = None):
     if r is None:
         r = np.sqrt(np.sum((x)**2, axis = 0))
 
-    #with np.errstate(divide='ignore'):
     np.seterr(divide='ignore')
     ret = x/r 
 
     ret[np.where(np.isnan(ret))] = 0.0
 
     return ret, m, r
-
