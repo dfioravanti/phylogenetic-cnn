@@ -4,7 +4,7 @@
 import os
 import sys
 
-from phcnn.parser import create_parser
+from phcnn.input_output import create_parser
 from phcnn.globalsettings import GlobalSettings
 import phcnn.phcnn as phcnn
 

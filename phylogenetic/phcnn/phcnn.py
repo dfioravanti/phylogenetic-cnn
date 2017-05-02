@@ -9,10 +9,36 @@ import numpy as np
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn import preprocessing
 
-
 from .globalsettings import GlobalSettings
 from .utils import load_datafile
 from .scaling import norm_l2
+
+
+def __prepare_output_array(cv_k, cv_n, number_of_features, number_of_samples):
+    total_number_iterations = cv_k * cv_n
+
+    output = {
+        'ranking': np.empty((total_number_iterations, number_of_features), dtype=np.int),
+        'NPV': np.empty(total_number_iterations),
+        'PPV': np.empty(total_number_iterations),
+        'SENS': np.empty(total_number_iterations),
+        'SPEC': np.empty(total_number_iterations),
+        'MCC': np.empty(total_number_iterations),
+        'AUC': np.empty(total_number_iterations),
+        'DOR': np.empty(total_number_iterations),
+        'ACC': np.empty(total_number_iterations),
+        'ACCint': np.empty(total_number_iterations),
+        'PREDS': np.zeros((total_number_iterations, number_of_samples), dtype=np.int),
+        'REALPREDS_0': np.zeros((total_number_iterations, number_of_samples), dtype=np.float),
+        'REALPREDS_1': np.zeros((total_number_iterations, number_of_samples), dtype=np.float)
+    }
+
+    for i in range(total_number_iterations):
+        for j in range(number_of_samples):
+            output['PREDS'][i][j] = -10
+            output['REALPREDS_0'][i][j] = output['REALPREDS_1'][i][j] = -10.0
+
+    return output
 
 
 class OptimizerNotFound(Exception):
@@ -101,7 +127,6 @@ def __apply_scaling(xs_train, xs_test, selected_scaling):
 
 
 def get_data(datafile, labels_datafile, coordinates_datafile):
-
     """   
     :param datafile: the first row contains the names of the features,
                      the first column contains the names for the samples,
