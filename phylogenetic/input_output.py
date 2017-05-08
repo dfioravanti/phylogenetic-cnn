@@ -6,7 +6,7 @@ import os
 import sys
 
 from phylogenetic.phcnn.utils import load_datafile
-from .globalsettings import GlobalSettings
+from phylogenetic.phcnn.globalsettings import GlobalSettings
 
 
 def create_parser():
