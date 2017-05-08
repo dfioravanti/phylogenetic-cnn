@@ -8,6 +8,9 @@ from phcnn.input_output import create_parser
 from phcnn.globalsettings import GlobalSettings
 import phcnn.phcnn as phcnn
 
+from phylogenetic.phcnn.globalsettings import GlobalSettings
+from phylogenetic.phcnn.input_output import get_data
+
 
 def main():
 
@@ -31,3 +34,15 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def data():
+    """
+    Data providing function required by hyperas:
+
+    This function is separated from model() so that hyperopt
+    won't reload data for each evaluation run.
+    """
+    return get_data(GlobalSettings.datafile,
+                    GlobalSettings.labels_datafile,
+                    GlobalSettings.coordinates_datafile)

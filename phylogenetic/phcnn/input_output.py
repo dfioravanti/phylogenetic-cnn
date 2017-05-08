@@ -5,7 +5,9 @@ import numpy as np
 import os
 import sys
 
+from phylogenetic.phcnn.utils import load_datafile
 from .globalsettings import GlobalSettings
+
 
 def create_parser():
 
@@ -40,6 +42,35 @@ def create_parser():
     parser.add_argument('--allfeatures', action='store_true', help='Do not perform features step')
 
     return parser
+
+
+def get_data(datafile, labels_datafile, coordinates_datafile):
+    """   
+    :param datafile: the first row contains the names of the features,
+                     the first column contains the names for the samples,
+                     the remaining entries are the data
+    :param labels_datafile: Every entry i corresponds to the label associated with the ith sample in the datafile
+    :param coordinates_datafile: the first row contains the names of the features (we discard this since is redundant),
+                               the first column contains the names for the coordinate (1,...,n for some n),
+                               the remaining entries are the coordinates
+       
+    :return: A dictionary with all the data required by phcnn.
+    
+    """
+
+    feature_names, sample_names, xs = load_datafile(datafile)
+    ys = np.loadtxt(labels_datafile, dtype=np.int)
+    _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
+
+    return {'feature_names': feature_names,
+            'sample_names': sample_names,
+            'xs': np.copy(xs),
+            'ys': np.copy(ys),
+            'coordinate_names': coordinate_names,
+            'coordinates': coordinates,
+            'number_of_samples': xs.shape[0],
+            'number_of_features': xs.shape[1]
+            }
 
 
 if __name__ == '__main__':
