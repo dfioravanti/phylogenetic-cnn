@@ -5,7 +5,7 @@ import sys
 
 from phylogenetic.input_output import get_data, create_parser
 from phylogenetic.phcnn.globalsettings import GlobalSettings
-
+import phylogenetic.phcnn.phcnn as phcnn
 
 def data():
     """
@@ -33,11 +33,24 @@ def main():
     print(GlobalSettings.settings_to_strings())
     print(sys.argv)
 
-    data = get_data(GlobalSettings.datafile,
+    inputs = get_data(GlobalSettings.datafile,
                     GlobalSettings.label_datafile,
                     GlobalSettings.coordinates_datafile)
 
-    print(data)
+    print(inputs)
+
+    model = phcnn.PhcnnBuilder.build()
+
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='adam',
+                  metrics=['accuracy'])
+
+    model.fit(inputs['xs'][1:20], inputs['ys'][1:20],
+              batch_size=2,
+              nb_epoch=2,
+              validation_data=(inputs['xs'][21:40], inputs['ys'][21:40])
+              )
+
 
 if __name__ == '__main__':
     main()
