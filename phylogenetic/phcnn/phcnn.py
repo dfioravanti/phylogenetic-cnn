@@ -62,15 +62,12 @@ def _phylo_convolution_relu(**conv_params):
     filters = conv_params["filters"]
     kernel_size = conv_params["kernel_size"]
     subsample = conv_params["subsample"]
-    num_neighbors = conv_params["num_neighbors"]
+    nb_neighbors = conv_params["nb_neighbors"]
 
-    def f(inputs):
+    def f(xs, coordinates):
 
-        xs = inputs[:, 0, :, 0]
-        coordinates = inputs[:, 1, 0, :]
-
-        neighbors = _phyloneighbors(xs, coordinates, num_neighbors)
-        conv = Conv2D(input_shape=(1, 1, xs.shape[1] * num_neighbors),
+        neighbors = _phyloneighbors(xs, coordinates, nb_neighbors)
+        conv = Conv2D(input_shape=(1, 1, xs.shape[1] * nb_neighbors),
                       filters=filters, kernel_size=kernel_size,
                       border_mode='valid', activation='relu', subsample=subsample)(neighbors)
         return conv
@@ -80,26 +77,29 @@ def _phylo_convolution_relu(**conv_params):
 
 class PhcnnBuilder(object):
     @staticmethod
-    def build(input_shape, num_outputs, num_neighbors=2):
+    def build(xs_shape, coordinates_shape, nb_outputs, nb_neighbors=2):
         """Builds a custom ResNet like architecture.
         Args:
-            input_shape: The input shape in the form (nb_nb_features, nb_coordinates)
-            num_outputs: The number of outputs at final softmax layer
-            num_neighbors: the number of phyloneighboors to be considered in the convolution
+            xs_shape: The shape of the xs tensor in the (nb_samples, nb_features)
+            coordinates_shape: The shape of the xs tensor in the (nb_samples, nb_coordinates)
+            nb_outputs: The number of outputs at final softmax layer
+            nb_neighbors: the number of phyloneighboors to be considered in the convolution
         Returns:
             The keras `Model`.
         """
 
-        inputs = Input(shape=input_shape)
-        pyloconv1 = _phylo_convolution_relu(filters=4, kernel_size=(1, num_neighbors),
-                                            subsample=(1, num_neighbors),
-                                            num_neighboors=num_neighbors)(inputs)
+        xs = Input(shape=xs_shape, name="xs_input")
+        coordinates = Input(shape=coordinates_shape, name="coordinates_input")
+
+        pyloconv1 = _phylo_convolution_relu(filters=4, kernel_size=(1, nb_neighbors),
+                                            subsample=(1, nb_neighbors),
+                                            nb_neighbors=nb_neighbors)(xs, coordinates)
         padd1 = ZeroPadding2D(padding=(0, 1))(pyloconv1)
         cropp1 = Cropping2D(cropping=((0, 0), (1, 0)))(padd1)
         max1 = MaxPooling2D(pool_size=(1, 2), border_mode="valid")(cropp1)
         flatt1 = Flatten()(max1)
         drop1 = Dense(activation="dropout")(flatt1)
-        dense = Dense(units=num_outputs, kernel_initializer="he_normal",
+        dense = Dense(units=nb_outputs, kernel_initializer="he_normal",
                       activation="softmax")(drop1)
 
         model = Model(inputs=inputs, outputs=dense)

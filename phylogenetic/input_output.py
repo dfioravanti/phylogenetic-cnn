@@ -68,8 +68,9 @@ def get_data(datafile, labels_datafile, coordinates_datafile):
             'ys': np.copy(ys),
             'coordinate_names': coordinate_names,
             'coordinates': coordinates,
-            'number_of_samples': xs.shape[0],
-            'number_of_features': xs.shape[1]
+            'nb_samples': xs.shape[0],
+            'nb_features': xs.shape[1],
+            'nb_coordinates': coordinates.shape[1]
             }
 
 
