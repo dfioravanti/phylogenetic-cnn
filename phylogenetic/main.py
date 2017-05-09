@@ -6,6 +6,8 @@ import sys
 from phylogenetic.input_output import get_data, create_parser
 from phylogenetic.phcnn.globalsettings import GlobalSettings
 import phylogenetic.phcnn.phcnn as phcnn
+from keras.utils import np_utils
+
 
 
 def data():
@@ -35,23 +37,27 @@ def main():
                       GlobalSettings.label_datafile,
                       GlobalSettings.coordinates_datafile)
 
-#    print(inputs)
-
-    model = phcnn.PhcnnBuilder.build(xs_shape=(inputs['nb_samples'], inputs['nb_features']),
-                                     coordinates_shape=(inputs['nb_features'], inputs['nb_coordinates']),
+    model = phcnn.PhcnnBuilder.build(nb_features=inputs['nb_features'],
+                                     coordinates=inputs['coordinates'],
                                      nb_outputs=2
                                      )
+    intermediate_output = model.predict(inputs['xs'])
+    print(intermediate_output[0].shape)
+    print(intermediate_output[0])
 
-    model.compile(loss='categorical_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
 
-    model.fit({'xs_input':inputs['xs'][1:20], 'coordinates_input':inputs['coordinates']},
-              inputs['ys'][1:20],
-              batch_size=2,
-              nb_epoch=2
-              #validation_data=(inputs['xs'][21:40], inputs['ys'][21:40])
-              )
+    # model.compile(loss='categorical_crossentropy',
+    #               optimizer='adam',
+    #               metrics=['accuracy'])
+    #
+    # print(model.summary())
+    #
+    # model.fit({'xs_input': inputs['xs']},
+    #           {'output': np_utils.to_categorical(inputs['ys'])},
+    #           batch_size=inputs['nb_samples'],
+    #           epochs=10
+    #           #validation_data=(inputs['xs'][21:40], inputs['ys'][21:40])
+    #           )
 
 
 if __name__ == '__main__':
