@@ -70,7 +70,7 @@ def get_data(datafile, labels_datafile, coordinates_datafile):
             'coordinates': coordinates,
             'nb_samples': xs.shape[0],
             'nb_features': xs.shape[1],
-            'nb_coordinates': coordinates.shape[1]
+            'nb_coordinates': coordinates.shape[0]
             }
 
 
