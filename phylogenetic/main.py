@@ -41,7 +41,10 @@ def main():
                                      coordinates=inputs['coordinates'],
                                      nb_outputs=2
                                      )
+
     intermediate_output = model.predict(inputs['xs'])
+
+    print(inputs['xs'].shape)
     print(intermediate_output[0].shape)
     print(intermediate_output[0])
 

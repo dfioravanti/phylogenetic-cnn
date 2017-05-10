@@ -22,6 +22,14 @@ from sklearn.metrics import euclidean_distances
 import tensorflow as tf
 
 
+def gather_along_axis(data, indices, axis=0):
+  if not axis:
+    return K.gather(data, indices)
+  rank = data.shape.ndims
+  perm = [axis] + list(range(1, axis)) + [0] + list(range(axis + 1, rank))
+  return tf.transpose(K.gather(tf.transpose(data, perm=perm), indices), perm=perm)
+
+
 def _phngb(coordinates, nb_neighbors):
     """
     Helper to build a phylo_neighbors layer
@@ -31,9 +39,9 @@ def _phngb(coordinates, nb_neighbors):
     :param nb_neighbors: number of neighbor that will computed    
     """
 
-    def f(x):
+    def f(xs):
         """
-        :param x: a tensor containing the current feature 
+        :param xs: a tensor with shape (batch_size, nb_features) containing the current features  
         :return: a keras Lambda layer that applies returns a tensor where every entry of x is followed by its 
                  nb_neighbors closes neighbors. 
         """
@@ -46,13 +54,14 @@ def _phngb(coordinates, nb_neighbors):
         for i in range(nb_features):
             neighbor_indexes[i] = np.argsort(dist[i])
 
-        output = K.zeros((0,))
-        for feature in range(nb_features):
-            for nth_neighbor in range(nb_neighbors):
-                target_feature = (nb_neighbors * feature) + nth_neighbor
-                target_neighbor = neighbor_indexes[feature, nth_neighbor]
+        output = (tf.slice(xs, [0, 0], [-1, 1]))
 
-                output = K.concatenate([output, x[:,target_neighbor]])
+        for feature in range(1, nb_features):
+            for nth_neighbor in range(nb_neighbors):
+                target_neighbor = neighbor_indexes[feature, nth_neighbor]
+                output = K.concatenate([output,
+                                        tf.slice(xs, [0, target_neighbor], [-1, 1])
+                                        ], axis=1)
 
         return output
 
@@ -115,7 +124,8 @@ class PhcnnBuilder(object):
 
         #flatt = Flatten()(phngb)
         #dense = Dense(units=2, kernel_initializer="he_normal",
-         #             activation="relu", name='output')(flatt)
+        #             activation="relu", name='output')(phngb)
 
-        model = Model(inputs=x, outputs=x)
-        return model
+        #y = Lambda(lambda t: tf.slice(t, [0, 0], [-1, 32]))(phngb)
+
+        return Model(inputs=x, outputs=phngb)
