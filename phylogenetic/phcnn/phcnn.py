@@ -63,30 +63,24 @@ def _phngb(coordinates, nb_neighbors):
                                         tf.slice(xs, [0, target_neighbor], [-1, 1])
                                         ], axis=1)
 
-        return output
+        return tf.reshape(output, (tf.shape(output)[0], 1, nb_features * nb_neighbors, 1))
 
     return Lambda(lambda x: f(x))
 
 
-def _phylo_convolution_relu(**conv_params):
+def _phylo_convolution(**conv_params):
     """
         Helper to build a phyloneighboor -> conv -> relu block
     """
 
     filters = conv_params["filters"]
-    kernel_size = conv_params["kernel_size"]
-    subsample = conv_params["subsample"]
     nb_neighbors = conv_params["nb_neighbors"]
-    coordinates = conv_params["coordinates"]
 
-    def f(x, coordinate):
+    def f(xs):
 
-        neighbors = _phyloneighbors(x, coordinates, nb_neighbors)
-        conv = Conv2D(input_shape=(1, 1, xs.shape[1] * nb_neighbors),
-                      filters=filters, kernel_size=kernel_size,
-                      border_mode='valid', activation='relu', subsample=subsample)(neighbors)
-        weight = conv.get_weights()
-        return conv, coordinates_convolution
+        return Conv2D(input_shape=(None, 1, xs.shape[2], 1),
+                      filters=filters, kernel_size=(1, nb_neighbors),
+                      padding='valid', activation='relu', strides=(1, nb_neighbors))(xs)
 
     return f
 
@@ -106,12 +100,7 @@ class PhcnnBuilder(object):
 
         x = Input(shape=(nb_features,), name="xs_input")
         phngb = _phngb(coordinates, nb_neighbors)(x)
-
-
-        # pyloconv1, _ = _phylo_convolution_relu(filters=4, kernel_size=(1, nb_neighbors),
-        #                                        coordinates=coordinates,
-        #                                        subsample=(1, nb_neighbors),
-        #                                        nb_neighbors=nb_neighbors)(x)
+        pyloconv1 = _phylo_convolution(filters=4, nb_neighbors=nb_neighbors)(phngb)
         # padd1 = ZeroPadding2D(padding=(0, 1))(pyloconv1)
         # cropp1 = Cropping2D(cropping=((0, 0), (1, 0)))(padd1)
         # max1 = MaxPooling2D(pool_size=(1, 2), border_mode="valid")(cropp1)
@@ -128,4 +117,4 @@ class PhcnnBuilder(object):
 
         #y = Lambda(lambda t: tf.slice(t, [0, 0], [-1, 32]))(phngb)
 
-        return Model(inputs=x, outputs=phngb)
+        return Model(inputs=x, outputs=pyloconv1)
