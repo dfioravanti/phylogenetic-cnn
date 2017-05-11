@@ -22,18 +22,6 @@ from sklearn.metrics import euclidean_distances
 import tensorflow as tf
 
 
-# TODO: trash it
-def gather_along_axis(data, indices, axis=0):
-  if not axis:
-    return K.gather(data, indices)
-  rank = data.shape.ndims
-  perm = [axis] + list(range(1, axis)) + [0] + list(range(axis + 1, rank))
-  return tf.transpose(K.gather(tf.transpose(data, perm=perm), indices), perm=perm)
-
-
-
-
-
 def _euclidean_distances(X):
     """
     
@@ -42,7 +30,7 @@ def _euclidean_distances(X):
     """
 
     Y = K.transpose(X)
-    XX = K.sqrt(K.sum(K.square(X), axis=1))
+    XX = K.expand_dims(K.sum(K.square(X), axis=1), 0)
     YY = K.transpose(XX)
     d = K.dot(X, Y)
     d *= -2
@@ -53,7 +41,7 @@ def _euclidean_distances(X):
     return K.sqrt(d)
 
 
-def _phngb(coordinates, nb_neighbors):
+def _phngb(nb_neighbors):
     """
     Helper to build a phylo_neighbors layer
     :param coordinates: a tensor with shape (number of coordinates, number of features)
@@ -62,7 +50,7 @@ def _phngb(coordinates, nb_neighbors):
     :param nb_neighbors: number of neighbor that will computed    
     """
 
-    def f(xs):
+    def f(xs, coordinates):
         """
         :param xs: a tensor with shape (batch_size, nb_features) containing the current features  
         :return: a keras Lambda layer that applies returns a tensor where every entry of x is followed by its 
@@ -71,24 +59,26 @@ def _phngb(coordinates, nb_neighbors):
 
         nb_features = coordinates.shape[1]
         # dist[i,j] is the distance between the ith feature and the jth feature
-        dist = _euclidean_distances(coordinates.transpose())
+        dist = _euclidean_distances(K.transpose(coordinates))
         # neighbor_indexes[i,j] is index of the jth closest feature to the feature i
-        neighbor_indexes = np.zeros((nb_features, nb_features), dtype='int')
-        for i in range(nb_features):
-            neighbor_indexes[i] = np.argsort(dist[i])
+        _, neighbor_indexes = tf.nn.top_k(-dist, k=nb_neighbors)
 
-        output = (tf.slice(xs, [0, 0], [-1, 1]))
+        output = K.expand_dims(xs[:, 0], 1)
 
-        for feature in range(1, nb_features):
+        for feature in range(0, nb_features):
             for nth_neighbor in range(nb_neighbors):
-                target_neighbor = neighbor_indexes[feature, nth_neighbor]
-                output = K.concatenate([output,
-                                        tf.slice(xs, [0, target_neighbor], [-1, 1])
-                                        ], axis=1)
+                if not (feature == nth_neighbor == 0):
+                    target_neighbor = neighbor_indexes[feature, nth_neighbor]
+                    output = K.concatenate([output,
+                                            K.expand_dims(xs[:, target_neighbor], 1)
+                                            ], axis=1)
 
-        return tf.reshape(output, (1, nb_features * nb_neighbors, 1))
+        output = K.expand_dims(output, 1)
+        output = K.expand_dims(output, 3)
 
-    return Lambda(lambda x: f(x))
+        return output
+
+    return Lambda(lambda x: f(*x))
 
 
 def _phylo_convolution(**conv_params):
@@ -111,7 +101,7 @@ def _phylo_convolution(**conv_params):
 class PhcnnBuilder(object):
 
     @staticmethod
-    def build(nb_features, coordinates, nb_outputs, nb_neighbors=2):
+    def build(coordinates, nb_features, nb_outputs, nb_neighbors=2):
         """Builds a custom ResNet like architecture.
         Args:
             xs_shape: The shape of the xs tensor in the (nb_samples, nb_features)
@@ -123,7 +113,9 @@ class PhcnnBuilder(object):
         """
 
         x = Input(shape=(nb_features,), name="xs_input")
-        phngb = _phngb(coordinates, nb_neighbors)(x)
+        coor = Input(tensor=coordinates, name="coordinates_input")
+
+        phngb = _phngb(nb_neighbors)([x, coor])
         pyloconv1 = _phylo_convolution(filters=4, nb_neighbors=nb_neighbors)(phngb)
         # padd1 = ZeroPadding2D(padding=(0, 1))(pyloconv1)
         # cropp1 = Cropping2D(cropping=((0, 0), (1, 0)))(padd1)
@@ -141,4 +133,4 @@ class PhcnnBuilder(object):
 
         #y = Lambda(lambda t: tf.slice(t, [0, 0], [-1, 32]))(phngb)
 
-        return Model(inputs=x, outputs=pyloconv1)
+        return Model(inputs=[x], outputs=phngb)

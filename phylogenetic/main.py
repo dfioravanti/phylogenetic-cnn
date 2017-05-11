@@ -7,6 +7,7 @@ from phylogenetic.input_output import get_data, create_parser
 from phylogenetic.phcnn.globalsettings import GlobalSettings
 import phylogenetic.phcnn.phcnn as phcnn
 from keras.utils import np_utils
+from keras import backend as K
 
 
 
@@ -37,12 +38,17 @@ def main():
                       GlobalSettings.label_datafile,
                       GlobalSettings.coordinates_datafile)
 
-    model = phcnn.PhcnnBuilder.build(nb_features=inputs['nb_features'],
-                                     coordinates=inputs['coordinates'],
+
+
+    coordinates = K.constant(inputs['coordinates'])
+
+    model = phcnn.PhcnnBuilder.build(
+                                     coordinates=coordinates,
+                                     nb_features=inputs['nb_features'],
                                      nb_outputs=2
                                      )
 
-    intermediate_output = model.predict(inputs['xs'])
+    intermediate_output = model.predict({'xs_input': inputs['xs']})
 
     print(inputs['xs'].shape)
     print(intermediate_output[0].shape)
