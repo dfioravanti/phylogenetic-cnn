@@ -22,12 +22,35 @@ from sklearn.metrics import euclidean_distances
 import tensorflow as tf
 
 
+# TODO: trash it
 def gather_along_axis(data, indices, axis=0):
   if not axis:
     return K.gather(data, indices)
   rank = data.shape.ndims
   perm = [axis] + list(range(1, axis)) + [0] + list(range(axis + 1, rank))
   return tf.transpose(K.gather(tf.transpose(data, perm=perm), indices), perm=perm)
+
+
+
+
+
+def _euclidean_distances(X):
+    """
+    
+    :param coordinates: 
+    :return: 
+    """
+
+    Y = K.transpose(X)
+    XX = K.sqrt(K.sum(K.square(X), axis=1))
+    YY = K.transpose(XX)
+    d = K.dot(X, Y)
+    d *= -2
+    d += XX
+    d += YY
+    d = K.maximum(d, K.constant(0))
+    # -- ??
+    return K.sqrt(d)
 
 
 def _phngb(coordinates, nb_neighbors):
@@ -48,7 +71,7 @@ def _phngb(coordinates, nb_neighbors):
 
         nb_features = coordinates.shape[1]
         # dist[i,j] is the distance between the ith feature and the jth feature
-        dist = euclidean_distances(coordinates.transpose())
+        dist = _euclidean_distances(coordinates.transpose())
         # neighbor_indexes[i,j] is index of the jth closest feature to the feature i
         neighbor_indexes = np.zeros((nb_features, nb_features), dtype='int')
         for i in range(nb_features):
@@ -63,7 +86,7 @@ def _phngb(coordinates, nb_neighbors):
                                         tf.slice(xs, [0, target_neighbor], [-1, 1])
                                         ], axis=1)
 
-        return tf.reshape(output, (tf.shape(output)[0], 1, nb_features * nb_neighbors, 1))
+        return tf.reshape(output, (1, nb_features * nb_neighbors, 1))
 
     return Lambda(lambda x: f(x))
 
@@ -78,7 +101,7 @@ def _phylo_convolution(**conv_params):
 
     def f(xs):
 
-        return Conv2D(input_shape=(None, 1, xs.shape[2], 1),
+        return Conv2D(input_shape=(1, xs.shape[1], 1),
                       filters=filters, kernel_size=(1, nb_neighbors),
                       padding='valid', activation='relu', strides=(1, nb_neighbors))(xs)
 
@@ -86,6 +109,7 @@ def _phylo_convolution(**conv_params):
 
 
 class PhcnnBuilder(object):
+
     @staticmethod
     def build(nb_features, coordinates, nb_outputs, nb_neighbors=2):
         """Builds a custom ResNet like architecture.
