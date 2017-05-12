@@ -5,9 +5,12 @@ from keras.models import Model
 from keras.layers import (
     Layer,
     Input,
+    Reshape,
+    Permute,
     Activation,
     Dense,
     Flatten,
+    Dropout,
     ZeroPadding2D,
     Cropping2D,
     Lambda
@@ -16,19 +19,8 @@ from keras.layers.convolutional import (
     Conv2D,
     MaxPooling2D,
 )
-from keras.layers.merge import add
-from keras.layers import (
-    activations,
-    initializers,
-    regularizers,
-    constraints
-)
 from keras.engine import InputSpec
-from keras.utils import conv_utils
-from keras.engine.topology import _to_list
 from keras import backend as K
-import numpy as np
-from sklearn.metrics import euclidean_distances
 import tensorflow as tf
 
 class Phcnn(Conv2D):
@@ -60,7 +52,6 @@ class Phcnn(Conv2D):
             kernel_constraint=kernel_constraint,
             bias_constraint=bias_constraint,
         )
-
 
 def _euclidean_distances(X):
     """  
@@ -137,12 +128,18 @@ class PhcnnBuilder(object):
         coord = coordinates[0]
 
         phngb = Phngb(coordinates=coord,
-                      nb_neighbors=nb_neighbors,
+                      nb_neighbors=8,
                       nb_features=coord.shape[1])
         phcnn = Phcnn(nb_neighbors=nb_neighbors,
                       filters=4)
         x1 = phcnn(phngb(x))
+        #x1 = Reshape((temp.shape[2].value, temp.shape[3].value))(temp)
         coord1 = phcnn(phngb(coord))
+        #max = MaxPooling2D(pool_size=(1, 2), padding="valid")(x1)
+        flatt = Flatten()(x1)
+        drop = Dropout(0,1)(Dense(units=32)(flatt))
+        output = Dense(units=nb_outputs, kernel_initializer="he_normal",
+                       activation="softmax", name='output')(drop)
 
         #phyloconv1 = Phcnn(filters=4, nb_neighbors=nb_neighbors)(phngb)
         #get_conv_weigth = K.function([], [phyloconv1.get_weights()])
@@ -162,4 +159,4 @@ class PhcnnBuilder(object):
 
         #y = Lambda(lambda t: tf.slice(t, [0, 0], [-1, 32]))(phngb)
 
-        return Model(inputs=[x, coordinates], outputs=x1)
+        return Model(inputs=[x, coordinates], outputs=output)

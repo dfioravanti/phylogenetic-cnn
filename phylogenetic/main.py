@@ -44,26 +44,19 @@ def main():
                                      nb_outputs=2
                                      )
 
-    intermediate_output = model.predict({'xs_input': inputs['xs'],
-                                         'coordinates_input': inputs['coordinates']})
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='adam',
+                  metrics=['accuracy'])
 
-    print(inputs['xs'].shape)
-    print(intermediate_output[0,0,:,0].shape)
-    print(intermediate_output[:,0,:,0])
+    print(model.summary())
 
-
-    # model.compile(loss='categorical_crossentropy',
-    #               optimizer='adam',
-    #               metrics=['accuracy'])
-    #
-    # print(model.summary())
-    #
-    # model.fit({'xs_input': inputs['xs']},
-    #           {'output': np_utils.to_categorical(inputs['ys'])},
-    #           batch_size=inputs['nb_samples'],
-    #           epochs=10
-    #           #validation_data=(inputs['xs'][21:40], inputs['ys'][21:40])
-    #           )
+    model.fit({'xs_input': inputs['xs'],
+               'coordinates_input': inputs['coordinates']},
+              {'output': np_utils.to_categorical(inputs['ys'])},
+              batch_size=inputs['nb_samples'],
+              epochs=100
+              #validation_data=(inputs['xs'][21:40], inputs['ys'][21:40])
+              )
 
 
 if __name__ == '__main__':
