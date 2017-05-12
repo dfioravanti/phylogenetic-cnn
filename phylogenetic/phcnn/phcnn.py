@@ -31,10 +31,7 @@ import numpy as np
 from sklearn.metrics import euclidean_distances
 import tensorflow as tf
 
-
-class Phcnn(Layer):
-    """
-    """
+class Phcnn(Conv2D):
 
     def __init__(self,
                  nb_neighbors,
@@ -49,66 +46,20 @@ class Phcnn(Layer):
                  kernel_constraint=None,
                  bias_constraint=None,
                  **kwargs):
-        super(Phcnn, self).__init__(**kwargs)
-        self.filters = filters
-        self.kernel_size = (1, nb_neighbors)
-        self.strides = (1, nb_neighbors)
-        self.padding = padding
-        self.activation = activations.get(activation)
-        self.kernel_initializer = initializers.get(kernel_initializer)
-        self.bias_initializer = initializers.get(bias_initializer)
-        self.kernel_regularizer = regularizers.get(kernel_regularizer)
-        self.bias_regularizer = regularizers.get(bias_regularizer)
-        self.activity_regularizer = regularizers.get(activity_regularizer)
-        self.kernel_constraint = constraints.get(kernel_constraint)
-        self.bias_constraint = constraints.get(bias_constraint)
-        #self.input_spec = InputSpec(4)
-
-    def build(self, input_shape):
-
-        kernel_shape = self.kernel_size + (1, self.filters)
-        self.kernel = self.add_weight(shape=kernel_shape,
-                                      initializer=self.kernel_initializer,
-                                      name='kernel',
-                                      regularizer=self.kernel_regularizer,
-                                      constraint=self.kernel_constraint)
-
-        super(Phcnn, self).build(input_shape)
-
-    def call(self, inputs):
-        xs = inputs[0]
-        coordinates = inputs[1]
-
-        outputs = K.conv2d(
-            xs,
-            self.kernel,
-            strides=self.strides,
-            padding=self.padding,
-            data_format=self.data_format,
-            dilation_rate=self.dilation_rate)
-
-        new_coordinates = K.conv2d(
-            coordinates,
-            self.kernel,
-            strides=self.strides,
-            padding=self.padding,
-            data_format=self.data_format,
-            dilation_rate=self.dilation_rate)
-
-        return [self.activation(outputs), new_coordinates]
-
-    def compute_output_shape(self, input_shape):
-        space = input_shape[1:-1]
-        new_space = []
-        for i in range(len(space)):
-            new_dim = conv_utils.conv_output_length(
-                space[i],
-                self.kernel_size[i],
-                padding=self.padding,
-                stride=self.strides[i],
-                dilation=self.dilation_rate[i])
-            new_space.append(new_dim)
-        return (input_shape[0],) + tuple(new_space) + (self.filters,)
+        super(Phcnn, self).__init__(
+            filters=filters,
+            kernel_size=(1, nb_neighbors),
+            strides=(1, nb_neighbors),
+            padding=padding,
+            activation=activation,
+            kernel_initializer=kernel_initializer,
+            bias_initializer=bias_initializer,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
+            kernel_constraint=kernel_constraint,
+            bias_constraint=bias_constraint,
+        )
 
 
 def _euclidean_distances(X):
@@ -132,63 +83,39 @@ def _euclidean_distances(X):
 class Phngb(Layer):
 
     def __init__(self,
+                 coordinates,
                  nb_neighbors,
+                 nb_features,
                  **kwargs):
 
         super(Phngb, self).__init__(**kwargs)
         self.nb_neighbors = nb_neighbors
+        self.nb_features = nb_features
+        self.dist = _euclidean_distances(K.transpose(coordinates))
         #self.input_spec = InputSpec(ndim=3)
 
-    def compute_mask(self, inputs, mask=None):
-        super_mask = super(Phngb, self).compute_mask(inputs, mask)
-
-        if super_mask is None and len(inputs) > 1:
-            return [None for i in range(len(inputs))]
-
-        return super_mask
-
     def compute_output_shape(self, input_shape):
-        xs_shape = input_shape[0]
-        coordinates_shape = input_shape[1]
-        return [(xs_shape[0],
+        return [(input_shape[0],
                  1,
-                 xs_shape[1] * self.nb_neighbors,
-                 1),
-                (coordinates_shape[0],
-                 1,
-                 coordinates_shape[1] * self.nb_neighbors,
+                 input_shape[1] * self.nb_neighbors,
                  1)]
 
     def call(self, inputs):
-        xs = inputs[0]
-        coordinates = inputs[1]
 
-        nb_features = coordinates.shape[1]
-        # dist[i,j] is the distance between the ith feature and the jth feature
-        dist = _euclidean_distances(K.transpose(coordinates))
-        # neighbor_indexes[i,j] is index of the jth closest feature to the feature i
-        _, neighbor_indexes = tf.nn.top_k(-dist, k=self.nb_neighbors)
+        _, neighbor_indexes = tf.nn.top_k(-self.dist, k=self.nb_neighbors)
 
-        expanded_xs = K.expand_dims(xs[:, 0], 1)
-        expanded_coordinates = K.expand_dims(coordinates[:, 0], 1)
+        output = K.expand_dims(inputs[:, 0], 1)
 
-        for feature in range(0, nb_features):
+        for feature in range(0, self.nb_features):
             for nth_neighbor in range(self.nb_neighbors):
                 if not (feature == nth_neighbor == 0):
                     target_neighbor = neighbor_indexes[feature, nth_neighbor]
-                    expanded_xs = K.concatenate([expanded_xs,
-                                                 K.expand_dims(xs[:, target_neighbor], 1)
-                                                 ], axis=1)
-                    expanded_coordinates = K.concatenate([expanded_coordinates,
-                                                          K.expand_dims(coordinates[:, target_neighbor], 1)
-                                                          ], axis=1)
+                    output = K.concatenate([output,
+                                            K.expand_dims(inputs[:, target_neighbor], 1)
+                                            ], axis=1)
 
-        expanded_xs = K.expand_dims(expanded_xs, 1)
-        expanded_xs = K.expand_dims(expanded_xs, 3)
-        expanded_coordinates = K.expand_dims(expanded_coordinates, 1)
-        expanded_coordinates = K.expand_dims(expanded_coordinates, 3)
-
-        return [expanded_xs, expanded_coordinates]
+        output = K.expand_dims(output, 1)
+        return K.expand_dims(output, 3)
 
 
 class PhcnnBuilder(object):
@@ -209,7 +136,14 @@ class PhcnnBuilder(object):
         coordinates = Input(shape=(nb_coordinates, nb_features), name="coordinates_input")
         coord = coordinates[0]
 
-        phngb = Phngb(nb_neighbors=nb_neighbors)([x, coord])
+        phngb = Phngb(coordinates=coord,
+                      nb_neighbors=nb_neighbors,
+                      nb_features=coord.shape[1])
+        phcnn = Phcnn(nb_neighbors=nb_neighbors,
+                      filters=4)
+        x1 = phcnn(phngb(x))
+        coord1 = phcnn(phngb(coord))
+
         #phyloconv1 = Phcnn(filters=4, nb_neighbors=nb_neighbors)(phngb)
         #get_conv_weigth = K.function([], [phyloconv1.get_weights()])
         # padd1 = ZeroPadding2D(padding=(0, 1))(pyloconv1)
@@ -228,4 +162,4 @@ class PhcnnBuilder(object):
 
         #y = Lambda(lambda t: tf.slice(t, [0, 0], [-1, 32]))(phngb)
 
-        return Model(inputs=[x, coordinates], outputs=phngb)
+        return Model(inputs=[x, coordinates], outputs=x1)

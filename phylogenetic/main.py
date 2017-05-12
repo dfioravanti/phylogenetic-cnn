@@ -48,8 +48,8 @@ def main():
                                          'coordinates_input': inputs['coordinates']})
 
     print(inputs['xs'].shape)
-    print(intermediate_output[0,0].shape)
-    print(intermediate_output[0,0])
+    print(intermediate_output[0,0,:,0].shape)
+    print(intermediate_output[:,0,:,0])
 
 
     # model.compile(loss='categorical_crossentropy',
