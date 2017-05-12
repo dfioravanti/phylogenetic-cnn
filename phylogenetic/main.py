@@ -38,21 +38,18 @@ def main():
                       GlobalSettings.label_datafile,
                       GlobalSettings.coordinates_datafile)
 
-
-
-    coordinates = K.constant(inputs['coordinates'])
-
     model = phcnn.PhcnnBuilder.build(
-                                     coordinates=coordinates,
+                                     nb_coordinates=inputs['nb_coordinates'],
                                      nb_features=inputs['nb_features'],
                                      nb_outputs=2
                                      )
 
-    intermediate_output = model.predict({'xs_input': inputs['xs']})
+    intermediate_output = model.predict({'xs_input': inputs['xs'],
+                                         'coordinates_input': inputs['coordinates']})
 
     print(inputs['xs'].shape)
-    print(intermediate_output[0].shape)
-    print(intermediate_output[0])
+    print(intermediate_output[0,0].shape)
+    print(intermediate_output[0,0])
 
 
     # model.compile(loss='categorical_crossentropy',

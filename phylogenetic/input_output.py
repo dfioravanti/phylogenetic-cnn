@@ -62,12 +62,15 @@ def get_data(datafile, labels_datafile, coordinates_datafile):
     ys = np.loadtxt(labels_datafile, dtype=np.int)
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
 
+    all_coordinates = np.empty((xs.shape[0],) + coordinates.shape)
+    all_coordinates[0] = coordinates
+
     return {'feature_names': feature_names,
             'sample_names': sample_names,
             'xs': np.copy(xs),
             'ys': np.copy(ys),
             'coordinate_names': coordinate_names,
-            'coordinates': coordinates,
+            'coordinates': all_coordinates,
             'nb_samples': xs.shape[0],
             'nb_features': xs.shape[1],
             'nb_coordinates': coordinates.shape[0]

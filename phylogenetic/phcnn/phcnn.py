@@ -25,14 +25,15 @@ from keras.layers import (
 )
 from keras.engine import InputSpec
 from keras.utils import conv_utils
+from keras.engine.topology import _to_list
 from keras import backend as K
 import numpy as np
 from sklearn.metrics import euclidean_distances
 import tensorflow as tf
 
+
 class Phcnn(Layer):
     """
-        Helper to build a phyloneighboor -> conv -> relu block
     """
 
     def __init__(self,
@@ -61,7 +62,7 @@ class Phcnn(Layer):
         self.activity_regularizer = regularizers.get(activity_regularizer)
         self.kernel_constraint = constraints.get(kernel_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
-        self.input_spec = InputSpec(4)
+        #self.input_spec = InputSpec(4)
 
     def build(self, input_shape):
 
@@ -74,9 +75,9 @@ class Phcnn(Layer):
 
         super(Phcnn, self).build(input_shape)
 
-    def call(self, *x):
-        xs = x[0]
-        coordinates = x[1]
+    def call(self, inputs):
+        xs = inputs[0]
+        coordinates = inputs[1]
 
         outputs = K.conv2d(
             xs,
@@ -131,18 +132,32 @@ def _euclidean_distances(X):
 class Phngb(Layer):
 
     def __init__(self,
-                 xs_shape,
                  nb_neighbors,
                  **kwargs):
 
         super(Phngb, self).__init__(**kwargs)
         self.nb_neighbors = nb_neighbors
-        self.xs_shape = xs_shape
         #self.input_spec = InputSpec(ndim=3)
 
+    def compute_mask(self, inputs, mask=None):
+        super_mask = super(Phngb, self).compute_mask(inputs, mask)
+
+        if super_mask is None and len(inputs) > 1:
+            return [None for i in range(len(inputs))]
+
+        return super_mask
+
     def compute_output_shape(self, input_shape):
-        return self.xs_shape[0], \
-               self.xs_shape[1] * self.nb_neighbors
+        xs_shape = input_shape[0]
+        coordinates_shape = input_shape[1]
+        return [(xs_shape[0],
+                 1,
+                 xs_shape[1] * self.nb_neighbors,
+                 1),
+                (coordinates_shape[0],
+                 1,
+                 coordinates_shape[1] * self.nb_neighbors,
+                 1)]
 
     def call(self, inputs):
         xs = inputs[0]
@@ -168,54 +183,18 @@ class Phngb(Layer):
                                                           K.expand_dims(coordinates[:, target_neighbor], 1)
                                                           ], axis=1)
 
-        return expanded_xs, expanded_coordinates
+        expanded_xs = K.expand_dims(expanded_xs, 1)
+        expanded_xs = K.expand_dims(expanded_xs, 3)
+        expanded_coordinates = K.expand_dims(expanded_coordinates, 1)
+        expanded_coordinates = K.expand_dims(expanded_coordinates, 3)
 
-
-def _phngb2(coordinates, nb_neighbors):
-    """
-    Helper to build a phylo_neighbors layer
-    :param coordinates: a tensor with shape (number of coordinates, number of features)
-                        where coordinate[i,j] is the ith coordinate of the jth feature obtained with a MDS procedure.
-                        ith row = ith coordinate of the features and jth column = jth feature.
-    :param nb_neighbors: number of neighbor that will computed    
-    """
-
-    def f(xs):
-        """
-        :param xs: a tensor with shape (batch_size, nb_features) containing the current features  
-        :return: a keras Lambda layer that applies returns a tensor where every entry of x is followed by its 
-                 nb_neighbors closes neighbors. 
-        """
-
-        nb_features = coordinates.shape[1]
-        # dist[i,j] is the distance between the ith feature and the jth feature
-        dist = _euclidean_distances(K.transpose(coordinates))
-        # neighbor_indexes[i,j] is index of the jth closest feature to the feature i
-        _, neighbor_indexes = tf.nn.top_k(-dist, k=nb_neighbors)
-
-        expanded_xs = K.expand_dims(xs[:, 0], 1)
-        expanded_coordinates = K.expand_dims(coordinates[:, 0], 1)
-
-        for feature in range(0, nb_features):
-            for nth_neighbor in range(nb_neighbors):
-                if not (feature == nth_neighbor == 0):
-                    target_neighbor = neighbor_indexes[feature, nth_neighbor]
-                    expanded_xs = K.concatenate([expanded_xs,
-                                            K.expand_dims(xs[:, target_neighbor], 1)
-                                            ], axis=1)
-                    expanded_coordinates = K.concatenate([expanded_coordinates,
-                                                 K.expand_dims(coordinates[:, target_neighbor], 1)
-                                                 ], axis=1)
-
-        return expanded_xs, expanded_coordinates
-
-    return Lambda(lambda x: f(x))
+        return [expanded_xs, expanded_coordinates]
 
 
 class PhcnnBuilder(object):
 
     @staticmethod
-    def build(coordinates, nb_features, nb_outputs, nb_neighbors=2):
+    def build(nb_coordinates, nb_features, nb_outputs, nb_neighbors=2):
         """Builds a custom ResNet like architecture.
         Args:
             xs_shape: The shape of the xs tensor in the (nb_samples, nb_features)
@@ -227,10 +206,11 @@ class PhcnnBuilder(object):
         """
 
         x = Input(shape=(nb_features,), name="xs_input")
-        #coor = Input(tensor=coordinates, name="coordinates_input")
+        coordinates = Input(shape=(nb_coordinates, nb_features), name="coordinates_input")
+        coord = coordinates[0]
 
-        phngb = Phngb(xs_shape=x.shape, nb_neighbors=nb_neighbors)([x, coordinates])
-        phyloconv1 = Phcnn(filters=4, nb_neighbors=nb_neighbors)(phngb)
+        phngb = Phngb(nb_neighbors=nb_neighbors)([x, coord])
+        #phyloconv1 = Phcnn(filters=4, nb_neighbors=nb_neighbors)(phngb)
         #get_conv_weigth = K.function([], [phyloconv1.get_weights()])
         # padd1 = ZeroPadding2D(padding=(0, 1))(pyloconv1)
         # cropp1 = Cropping2D(cropping=((0, 0), (1, 0)))(padd1)
@@ -248,4 +228,4 @@ class PhcnnBuilder(object):
 
         #y = Lambda(lambda t: tf.slice(t, [0, 0], [-1, 32]))(phngb)
 
-        return Model(inputs=[x], outputs=phyloconv1)
+        return Model(inputs=[x, coordinates], outputs=phngb)
