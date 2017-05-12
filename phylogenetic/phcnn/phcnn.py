@@ -128,7 +128,50 @@ def _euclidean_distances(X):
     return K.sqrt(d)
 
 
-def _phngb(coordinates, nb_neighbors):
+class Phngb(Layer):
+
+    def __init__(self,
+                 xs_shape,
+                 nb_neighbors,
+                 **kwargs):
+
+        super(Phngb, self).__init__(**kwargs)
+        self.nb_neighbors = nb_neighbors
+        self.xs_shape = xs_shape
+        #self.input_spec = InputSpec(ndim=3)
+
+    def compute_output_shape(self, input_shape):
+        return self.xs_shape[0], \
+               self.xs_shape[1] * self.nb_neighbors
+
+    def call(self, inputs):
+        xs = inputs[0]
+        coordinates = inputs[1]
+
+        nb_features = coordinates.shape[1]
+        # dist[i,j] is the distance between the ith feature and the jth feature
+        dist = _euclidean_distances(K.transpose(coordinates))
+        # neighbor_indexes[i,j] is index of the jth closest feature to the feature i
+        _, neighbor_indexes = tf.nn.top_k(-dist, k=self.nb_neighbors)
+
+        expanded_xs = K.expand_dims(xs[:, 0], 1)
+        expanded_coordinates = K.expand_dims(coordinates[:, 0], 1)
+
+        for feature in range(0, nb_features):
+            for nth_neighbor in range(self.nb_neighbors):
+                if not (feature == nth_neighbor == 0):
+                    target_neighbor = neighbor_indexes[feature, nth_neighbor]
+                    expanded_xs = K.concatenate([expanded_xs,
+                                                 K.expand_dims(xs[:, target_neighbor], 1)
+                                                 ], axis=1)
+                    expanded_coordinates = K.concatenate([expanded_coordinates,
+                                                          K.expand_dims(coordinates[:, target_neighbor], 1)
+                                                          ], axis=1)
+
+        return expanded_xs, expanded_coordinates
+
+
+def _phngb2(coordinates, nb_neighbors):
     """
     Helper to build a phylo_neighbors layer
     :param coordinates: a tensor with shape (number of coordinates, number of features)
@@ -186,7 +229,7 @@ class PhcnnBuilder(object):
         x = Input(shape=(nb_features,), name="xs_input")
         #coor = Input(tensor=coordinates, name="coordinates_input")
 
-        phngb = _phngb(coordinates, nb_neighbors)(x)
+        phngb = Phngb(xs_shape=x.shape, nb_neighbors=nb_neighbors)([x, coordinates])
         phyloconv1 = Phcnn(filters=4, nb_neighbors=nb_neighbors)(phngb)
         #get_conv_weigth = K.function([], [phyloconv1.get_weights()])
         # padd1 = ZeroPadding2D(padding=(0, 1))(pyloconv1)
