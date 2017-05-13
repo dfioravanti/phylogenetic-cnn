@@ -5,23 +5,38 @@ from keras.models import Model
 from keras.layers import (
     Layer,
     Input,
+    MaxPool2D,
     Reshape,
     Permute,
     Activation,
     Dense,
     Flatten,
     Dropout,
-    ZeroPadding2D,
-    Cropping2D,
-    Lambda
 )
 from keras.layers.convolutional import (
-    Conv2D,
-    MaxPooling2D,
+    Conv2D
 )
 from keras.engine import InputSpec
 from keras import backend as K
 import tensorflow as tf
+
+def _euclidean_distances(X):
+    """  
+    :param coordinates: 
+    :return: 
+    """
+
+    Y = K.transpose(X)
+    XX = K.expand_dims(K.sum(K.square(X), axis=1), 0)
+    YY = K.transpose(XX)
+    d = K.dot(X, Y)
+    d *= -2
+    d += XX
+    d += YY
+    d = K.maximum(d, K.constant(0, dtype=d.dtype))
+    # -- ??
+    return K.sqrt(d)
+
 
 class Phcnn(Conv2D):
 
@@ -51,24 +66,8 @@ class Phcnn(Conv2D):
             activity_regularizer=activity_regularizer,
             kernel_constraint=kernel_constraint,
             bias_constraint=bias_constraint,
+            **kwargs
         )
-
-def _euclidean_distances(X):
-    """  
-    :param coordinates: 
-    :return: 
-    """
-
-    Y = K.transpose(X)
-    XX = K.expand_dims(K.sum(K.square(X), axis=1), 0)
-    YY = K.transpose(XX)
-    d = K.dot(X, Y)
-    d *= -2
-    d += XX
-    d += YY
-    d = K.maximum(d, K.constant(0))
-    # -- ??
-    return K.sqrt(d)
 
 
 class Phngb(Layer):
@@ -123,40 +122,22 @@ class PhcnnBuilder(object):
             The keras `Model`.
         """
 
-        x = Input(shape=(nb_features,), name="xs_input")
-        coordinates = Input(shape=(nb_coordinates, nb_features), name="coordinates_input")
+        x = Input(shape=(nb_features,), name="xs_input", dtype='float64')
+        coordinates = Input(shape=(nb_coordinates, nb_features), name="coordinates_input",  dtype='float64')
         coord = coordinates[0]
 
         phngb = Phngb(coordinates=coord,
                       nb_neighbors=8,
                       nb_features=coord.shape[1])
         phcnn = Phcnn(nb_neighbors=nb_neighbors,
-                      filters=4)
+                      filters=8)
         x1 = phcnn(phngb(x))
         #x1 = Reshape((temp.shape[2].value, temp.shape[3].value))(temp)
-        coord1 = phcnn(phngb(coord))
-        #max = MaxPooling2D(pool_size=(1, 2), padding="valid")(x1)
-        flatt = Flatten()(x1)
-        drop = Dropout(0,1)(Dense(units=32)(flatt))
+        #coord1 = phcnn(phngb(coord))
+        max = MaxPool2D(pool_size=(1, 2), padding="valid")(x1)
+        flatt = Flatten()(max)
+        drop = Dropout(0, 1)(Dense(units=256)(flatt))
         output = Dense(units=nb_outputs, kernel_initializer="he_normal",
                        activation="softmax", name='output')(drop)
-
-        #phyloconv1 = Phcnn(filters=4, nb_neighbors=nb_neighbors)(phngb)
-        #get_conv_weigth = K.function([], [phyloconv1.get_weights()])
-        # padd1 = ZeroPadding2D(padding=(0, 1))(pyloconv1)
-        # cropp1 = Cropping2D(cropping=((0, 0), (1, 0)))(padd1)
-        # max1 = MaxPooling2D(pool_size=(1, 2), border_mode="valid")(cropp1)
-        # flatt1 = Flatten()(max1)
-        # drop1 = Dense(activation="dropout")(flatt1)
-        # dense = Dense(units=nb_outputs, kernel_initializer="he_normal",
-        #               activation="softmax", name='output')(drop1)
-        #
-        # model = Model(inputs=['xs_input', 'coordinates_input'], outputs=dense)
-
-        #flatt = Flatten()(phngb)
-        #dense = Dense(units=2, kernel_initializer="he_normal",
-        #             activation="relu", name='output')(phngb)
-
-        #y = Lambda(lambda t: tf.slice(t, [0, 0], [-1, 32]))(phngb)
 
         return Model(inputs=[x, coordinates], outputs=output)

@@ -44,7 +44,11 @@ def create_parser():
     return parser
 
 
-def get_data(datafile, labels_datafile, coordinates_datafile):
+def get_data(datafile,
+             labels_datafile,
+             coordinates_datafile,
+             validation_datafile=None,
+             validation_label_datafile=None):
     """   
     :param datafile: the first row contains the names of the features,
                      the first column contains the names for the samples,
@@ -60,15 +64,24 @@ def get_data(datafile, labels_datafile, coordinates_datafile):
 
     feature_names, sample_names, xs = load_datafile(datafile)
     ys = np.loadtxt(labels_datafile, dtype=np.int)
+
+    if validation_datafile is not None and validation_label_datafile is not None:
+        _, _, validation_xs = load_datafile(validation_datafile)
+        validation_ys =  np.loadtxt(validation_label_datafile, dtype=np.int)
+
+
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
 
-    all_coordinates = np.empty((xs.shape[0],) + coordinates.shape)
-    all_coordinates[0] = coordinates
+    all_coordinates = np.zeros((xs.shape[0],) + coordinates.shape)
+    for i in range(xs.shape[0]):
+        all_coordinates[i] = np.copy(coordinates)
 
     return {'feature_names': feature_names,
             'sample_names': sample_names,
             'xs': np.copy(xs),
             'ys': np.copy(ys),
+            'validation_xs': np.copy(validation_xs),
+            'validation_ys': np.copy(validation_ys),
             'coordinate_names': coordinate_names,
             'coordinates': all_coordinates,
             'nb_samples': xs.shape[0],
