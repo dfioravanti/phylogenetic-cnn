@@ -8,20 +8,6 @@ from phylogenetic.phcnn.globalsettings import GlobalSettings
 import phylogenetic.phcnn.phcnn as phcnn
 from keras.utils import np_utils
 from keras.optimizers import SGD, Adam
-from keras import backend as K
-
-
-
-def data():
-    """
-    Data providing function required by hyperas:
-
-    This function is separated from model() so that hyperopt
-    won't reload data for each evaluation run.
-    """
-    return get_data(GlobalSettings.datafile,
-                    GlobalSettings.labels_datafile,
-                    GlobalSettings.coordinates_datafile)
 
 
 def main():
@@ -48,22 +34,34 @@ def main():
                                      )
 
     #opt = SGD(lr=0.001, nesterov=True, momentum=0.8, decay=1e-06)
-    opt = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
+    opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
     model.compile(loss='categorical_crossentropy',
                   optimizer=opt,
                   metrics=['accuracy'])
 
     print(model.summary())
 
-    model.fit({'xs_input': inputs['xs'],
-               'coordinates_input': inputs['coordinates']},
-              {'output': np_utils.to_categorical(inputs['ys'])},
+    nb_training = 60
+    xs_tr = inputs['xs'][0:nb_training]
+    ys_tr = np_utils.to_categorical(inputs['ys'][0:nb_training])
+    xs_ts = inputs['xs'][nb_training:]
+    ys_ts = np_utils.to_categorical(inputs['ys'][nb_training:])
+
+    model.fit({'xs_input': xs_tr,
+               'coordinates_input': inputs['coordinates'][0:nb_training]},
+              {'output': ys_tr},
               epochs=200,
+              verbose=2,
               validation_data=({'xs_input': inputs['validation_xs'],
                                 'coordinates_input': inputs['coordinates'][0:inputs['validation_xs'].shape[0]]},
                                {'output': np_utils.to_categorical(inputs['validation_ys'])}
                               )
               )
+
+    score, acc = model.evaluate({'xs_input': xs_ts,
+                                 'coordinates_input': inputs['coordinates'][nb_training:]},
+                                 {'output': ys_ts}, verbose=0)
+    print('Test accuracy:', acc)
 
 if __name__ == '__main__':
     main()

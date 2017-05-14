@@ -7,18 +7,18 @@ from keras.layers import (
     Input,
     MaxPool2D,
     Reshape,
-    Permute,
-    Activation,
     Dense,
     Flatten,
     Dropout,
+    Lambda
 )
+from keras.layers.merge import Concatenate
 from keras.layers.convolutional import (
     Conv2D
 )
-from keras.engine import InputSpec
 from keras import backend as K
 import tensorflow as tf
+
 
 def _euclidean_distances(X):
     """  
@@ -82,7 +82,6 @@ class Phngb(Layer):
         self.nb_neighbors = nb_neighbors
         self.nb_features = nb_features
         self.dist = _euclidean_distances(K.transpose(coordinates))
-        #self.input_spec = InputSpec(ndim=3)
 
     def compute_output_shape(self, input_shape):
         return [(input_shape[0],
@@ -95,17 +94,29 @@ class Phngb(Layer):
         _, neighbor_indexes = tf.nn.top_k(-self.dist, k=self.nb_neighbors)
 
         output = K.expand_dims(inputs[:, 0], 1)
+        for nth_neighbor in range(self.nb_neighbors):
+            target_neighbor = neighbor_indexes[0, nth_neighbor]
+            output = K.concatenate([output,
+                                    K.expand_dims(inputs[:, target_neighbor], 1)
+                                    ], axis=1)
 
-        for feature in range(0, self.nb_features):
+        for feature in range(1, self.nb_features):
             for nth_neighbor in range(self.nb_neighbors):
-                if not (feature == nth_neighbor == 0):
-                    target_neighbor = neighbor_indexes[feature, nth_neighbor]
-                    output = K.concatenate([output,
-                                            K.expand_dims(inputs[:, target_neighbor], 1)
-                                            ], axis=1)
+                target_neighbor = neighbor_indexes[feature, nth_neighbor]
+                output = K.concatenate([output,
+                                        K.expand_dims(inputs[:, target_neighbor], 1)
+                                        ], axis=1)
 
         output = K.expand_dims(output, 1)
         return K.expand_dims(output, 3)
+
+
+def slice_on_third(coord):
+
+    def f(x):
+        return x[:, :, coord]
+
+    return Lambda(lambda x: f(x))
 
 
 class PhcnnBuilder(object):
@@ -127,14 +138,35 @@ class PhcnnBuilder(object):
         coord = coordinates[0]
 
         phngb = Phngb(coordinates=coord,
-                      nb_neighbors=8,
+                      nb_neighbors=4,
                       nb_features=coord.shape[1])
         phcnn = Phcnn(nb_neighbors=nb_neighbors,
-                      filters=8)
-        x1 = phcnn(phngb(x))
-        #x1 = Reshape((temp.shape[2].value, temp.shape[3].value))(temp)
-        #coord1 = phcnn(phngb(coord))
-        max = MaxPool2D(pool_size=(1, 2), padding="valid")(x1)
+                      filters=4)
+        conv1 = phcnn(phngb(x))
+        conv_crd1 = phcnn(phngb(coord))
+        x1 = Reshape((conv1.shape[2].value, conv1.shape[3].value))(conv1)
+        crd1 = Reshape((conv_crd1.shape[2].value, conv_crd1.shape[3].value))(conv_crd1)
+
+        x_sliced = slice_on_third(0)(x1)
+        crd_sliced = slice_on_third(0)(crd1)
+        phngb1 = Phngb(coordinates=crd_sliced,
+                       nb_neighbors=4,
+                       nb_features=crd_sliced.shape[1])
+        phcnn1 = Phcnn(nb_neighbors=nb_neighbors,
+                       filters=2)
+        conv2 = phcnn1(phngb1(x_sliced))
+
+        for i in range(1, x1.shape[2].value):
+            x_sliced = slice_on_third(i)(x1)
+            crd_sliced = slice_on_third(i)(crd1)
+            phngb1 = Phngb(coordinates=crd_sliced,
+                           nb_neighbors=4,
+                           nb_features=crd_sliced.shape[1])
+            phcnn1 = Phcnn(nb_neighbors=nb_neighbors,
+                           filters=2)
+            conv2 = Concatenate()([conv2, phcnn1(phngb1(x_sliced))])
+
+        max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv2)
         flatt = Flatten()(max)
         drop = Dropout(0, 1)(Dense(units=256)(flatt))
         output = Dense(units=nb_outputs, kernel_initializer="he_normal",

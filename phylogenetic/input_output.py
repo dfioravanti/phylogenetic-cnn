@@ -67,8 +67,9 @@ def get_data(datafile,
 
     if validation_datafile is not None and validation_label_datafile is not None:
         _, _, validation_xs = load_datafile(validation_datafile)
-        validation_ys =  np.loadtxt(validation_label_datafile, dtype=np.int)
-
+        validation_ys = np.loadtxt(validation_label_datafile, dtype=np.int)
+    else:
+        validation_xs = validation_ys = None
 
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
 
