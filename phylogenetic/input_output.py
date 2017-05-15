@@ -1,12 +1,9 @@
 import argparse
-import configparser
-import mlpy
-import numpy as np
-import os
 import sys
 
+import numpy as np
+
 from phylogenetic.phcnn.utils import load_datafile
-from phylogenetic.phcnn.globalsettings import GlobalSettings
 
 
 def create_parser():
@@ -42,7 +39,6 @@ def create_parser():
     parser.add_argument('--allfeatures', action='store_true', help='Do not perform features step')
 
     return parser
-
 
 def get_data(datafile,
              labels_datafile,
@@ -87,7 +83,8 @@ def get_data(datafile,
             'coordinates': all_coordinates,
             'nb_samples': xs.shape[0],
             'nb_features': xs.shape[1],
-            'nb_coordinates': coordinates.shape[0]
+            'nb_coordinates': coordinates.shape[0],
+            'nb_classes': len(set(ys))
             }
 
 

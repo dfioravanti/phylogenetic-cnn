@@ -138,10 +138,10 @@ class PhcnnBuilder(object):
         coord = coordinates[0]
 
         phngb = Phngb(coordinates=coord,
-                      nb_neighbors=4,
+                      nb_neighbors=2,
                       nb_features=coord.shape[1])
         phcnn = Phcnn(nb_neighbors=nb_neighbors,
-                      filters=4)
+                      filters=1)
         conv1 = phcnn(phngb(x))
         conv_crd1 = phcnn(phngb(coord))
         x1 = Reshape((conv1.shape[2].value, conv1.shape[3].value))(conv1)
@@ -150,25 +150,25 @@ class PhcnnBuilder(object):
         x_sliced = slice_on_third(0)(x1)
         crd_sliced = slice_on_third(0)(crd1)
         phngb1 = Phngb(coordinates=crd_sliced,
-                       nb_neighbors=4,
+                       nb_neighbors=2,
                        nb_features=crd_sliced.shape[1])
         phcnn1 = Phcnn(nb_neighbors=nb_neighbors,
-                       filters=2)
+                       filters=1)
         conv2 = phcnn1(phngb1(x_sliced))
 
         for i in range(1, x1.shape[2].value):
             x_sliced = slice_on_third(i)(x1)
             crd_sliced = slice_on_third(i)(crd1)
             phngb1 = Phngb(coordinates=crd_sliced,
-                           nb_neighbors=4,
+                           nb_neighbors=2,
                            nb_features=crd_sliced.shape[1])
             phcnn1 = Phcnn(nb_neighbors=nb_neighbors,
-                           filters=2)
+                           filters=1)
             conv2 = Concatenate()([conv2, phcnn1(phngb1(x_sliced))])
 
         max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv2)
         flatt = Flatten()(max)
-        drop = Dropout(0, 1)(Dense(units=256)(flatt))
+        drop = Dropout(0, 1)(Dense(units=64)(flatt))
         output = Dense(units=nb_outputs, kernel_initializer="he_normal",
                        activation="softmax", name='output')(drop)
 
