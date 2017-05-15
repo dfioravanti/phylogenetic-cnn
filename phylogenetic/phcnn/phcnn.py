@@ -111,12 +111,43 @@ class Phngb(Layer):
         return K.expand_dims(output, 3)
 
 
-def slice_on_third(coord):
+def _slice_on_third(coord):
 
     def f(x):
         return x[:, :, coord]
 
     return Lambda(lambda x: f(x))
+
+
+def _conv_block(conv, conv_crd, nb_neighbors, filters):
+
+    xs = Reshape((conv.shape[2].value, conv.shape[3].value))(conv)
+    crd = Reshape((conv_crd.shape[2].value, conv_crd.shape[3].value))(conv_crd)
+
+    xs_sliced = _slice_on_third(0)(xs)
+    crd_sliced = _slice_on_third(0)(crd)
+
+    phngb = Phngb(coordinates=crd_sliced,
+                  nb_neighbors=nb_neighbors,
+                  nb_features=crd_sliced.shape[1])
+    phcnn = Phcnn(nb_neighbors=nb_neighbors,
+                  filters=filters)
+    conv = phcnn(phngb(xs_sliced))
+    conv_crd = phcnn(phngb(crd_sliced))
+
+    for i in range(1, xs.shape[2].value):
+        xs_sliced = _slice_on_third(i)(xs)
+        crd_sliced = _slice_on_third(i)(crd)
+        phngb = Phngb(coordinates=crd_sliced,
+                      nb_neighbors=nb_neighbors,
+                      nb_features=crd_sliced.shape[1])
+        phcnn = Phcnn(nb_neighbors=nb_neighbors,
+                      filters=filters)
+        conv = Concatenate()([conv, phcnn(phngb(xs_sliced))])
+        conv_crd = Concatenate()([conv_crd, phcnn(phngb(crd_sliced))])
+
+    return conv, conv_crd
+
 
 
 class PhcnnBuilder(object):
@@ -144,29 +175,11 @@ class PhcnnBuilder(object):
                       filters=1)
         conv1 = phcnn(phngb(x))
         conv_crd1 = phcnn(phngb(coord))
-        x1 = Reshape((conv1.shape[2].value, conv1.shape[3].value))(conv1)
-        crd1 = Reshape((conv_crd1.shape[2].value, conv_crd1.shape[3].value))(conv_crd1)
 
-        x_sliced = slice_on_third(0)(x1)
-        crd_sliced = slice_on_third(0)(crd1)
-        phngb1 = Phngb(coordinates=crd_sliced,
-                       nb_neighbors=2,
-                       nb_features=crd_sliced.shape[1])
-        phcnn1 = Phcnn(nb_neighbors=nb_neighbors,
-                       filters=1)
-        conv2 = phcnn1(phngb1(x_sliced))
+        conv2, conv_crd2 = _conv_block(conv1, conv_crd1, nb_neighbors=2, filters=1)
+        conv3, _ = _conv_block(conv2, conv_crd2, nb_neighbors=2, filters=1)
 
-        for i in range(1, x1.shape[2].value):
-            x_sliced = slice_on_third(i)(x1)
-            crd_sliced = slice_on_third(i)(crd1)
-            phngb1 = Phngb(coordinates=crd_sliced,
-                           nb_neighbors=2,
-                           nb_features=crd_sliced.shape[1])
-            phcnn1 = Phcnn(nb_neighbors=nb_neighbors,
-                           filters=1)
-            conv2 = Concatenate()([conv2, phcnn1(phngb1(x_sliced))])
-
-        max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv2)
+        max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv3)
         flatt = Flatten()(max)
         drop = Dropout(0, 1)(Dense(units=64)(flatt))
         output = Dense(units=nb_outputs, kernel_initializer="he_normal",

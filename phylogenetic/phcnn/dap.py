@@ -1,3 +1,7 @@
+import csv
+import os
+
+
 import numpy as np
 import mlpy
 from keras.optimizers import Adam, RMSprop, SGD
@@ -13,10 +17,10 @@ from . import performance as perf
 from . import phcnn as phcnn
 
 
-def _prepare_output_array(cv_k, cv_n, number_of_features, number_of_samples):
+def _prepare_metrics_array(cv_k, cv_n, number_of_features, number_of_samples):
     total_number_iterations = cv_k * cv_n
 
-    output = {
+    metrics = {
         'ranking': np.empty((total_number_iterations, number_of_features), dtype=np.int),
         'NPV': np.empty(total_number_iterations),
         'PPV': np.empty(total_number_iterations),
@@ -34,10 +38,10 @@ def _prepare_output_array(cv_k, cv_n, number_of_features, number_of_samples):
 
     for i in range(total_number_iterations):
         for j in range(number_of_samples):
-            output['PREDS'][i][j] = -10
-            output['REALPREDS_0'][i][j] = output['REALPREDS_1'][i][j] = -10.0
+            metrics['PREDS'][i][j] = -10
+            metrics['REALPREDS_0'][i][j] = metrics['REALPREDS_1'][i][j] = -10.0
 
-    return output
+    return metrics
 
 
 class _OptimizerNotFound(Exception):
@@ -178,7 +182,34 @@ def _predict_classes(model, xs, coordinates, batch_size=32, verbose=1):
         return (prb > 0.5).astype('int32')
 
 
+def _save_metrics_on_file(base_output_name, metrics):
+
+    np.savetxt(base_output_name + "_allmetrics_NPV.txt",
+               metrics['NPV'], fmt='%.4f', delimiter='\t')
+    np.savetxt(base_output_name + "_allmetrics_PPV.txt",
+               metrics['PPV'], fmt='%.4f', delimiter='\t')
+    np.savetxt(base_output_name + "_allmetrics_SENS.txt",
+               metrics['SENS'], fmt='%.4f', delimiter='\t')
+    np.savetxt(base_output_name + "_allmetrics_SPEC.txt",
+               metrics['SPEC'], fmt='%.4f', delimiter='\t')
+    np.savetxt(base_output_name + "_allmetrics_MCC.txt",
+               metrics['MCC'], fmt='%.4f', delimiter='\t')
+    np.savetxt(base_output_name + "_allmetrics_AUC.txt",
+               metrics['AUC'], fmt='%.4f', delimiter='\t')
+    np.savetxt(base_output_name + "_allmetrics_DOR.txt",
+               metrics['DOR'], fmt='%.4f', delimiter='\t')
+    np.savetxt(base_output_name + "_allmetrics_ACC.txt",
+               metrics['ACC'], fmt='%.4f', delimiter='\t')
+
+
 def DAP(inputs):
+
+    output_path = os.path.abspath(GlobalSettings.output_directory)
+    basefile_name = os.path.splitext(os.path.basename(GlobalSettings.datafile))[0]
+    base_output_name = os.path.join(output_path, '_'.join([basefile_name,
+                                                           "DNN",
+                                                            GlobalSettings.rank_method,
+                                                            GlobalSettings.scaling]))
 
     print('=' * 80)
     print('Building model')
@@ -194,13 +225,13 @@ def DAP(inputs):
                   optimizer=opt,
                   metrics=['accuracy'])
 
-    print(model.summary())
     print('Model construction completed')
+    model.summary()
 
-    output = _prepare_output_array(GlobalSettings.cv_k,
-                                   GlobalSettings.cv_n,
-                                   inputs['nb_features'],
-                                   inputs['nb_samples'])
+    metrics = _prepare_metrics_array(GlobalSettings.cv_k,
+                                     GlobalSettings.cv_n,
+                                     inputs['nb_features'],
+                                     inputs['nb_samples'])
 
     for n in range(GlobalSettings.cv_n):
         idx = mlpy.cv_kfold(n=inputs['nb_samples'],
@@ -221,17 +252,15 @@ def DAP(inputs):
             xs_tr, xs_ts = inputs['xs'][idx_tr], inputs['xs'][idx_ts]
             ys_tr, ys_ts = inputs['ys'][idx_tr], inputs['ys'][idx_ts]
             crd_tr, crd_ts = inputs['coordinates'][idx_tr], inputs['coordinates'][idx_ts]
-
             ys_tr_cat = np_utils.to_categorical(ys_tr, inputs['nb_classes'])
             ys_ts_cat = np_utils.to_categorical(ys_ts, inputs['nb_classes'])
-
             crd_validation = inputs['coordinates'][0:inputs['validation_xs'].shape[0]]
 
             print('-- centering and normalization using: {}'.format(GlobalSettings.scaling))
             xs_tr, xs_ts = _apply_scaling(xs_tr, xs_ts, GlobalSettings.scaling)
 
             print('-- ranking the features using: {}'.format(GlobalSettings.rank_method))
-            output['ranking'][current] = _get_ranking(xs_tr,
+            metrics['ranking'][current] = _get_ranking(xs_tr,
                                                       ys_tr,
                                                       GlobalSettings.rank_method,
                                                       seed=n)
@@ -258,18 +287,26 @@ def DAP(inputs):
             print('Test accuracy: {}'.format(acc))
             print('Test MCC: {}'.format(pred_mcc))
 
-            output['PREDS'][current, idx_ts] = p
-            output['REALPREDS_0'][current, idx_ts] = pv[:, 0]
-            output['REALPREDS_1'][current, idx_ts] = pv[:, 1]
+            metrics['PREDS'][current, idx_ts] = p
+            metrics['REALPREDS_0'][current, idx_ts] = pv[:, 0]
+            metrics['REALPREDS_1'][current, idx_ts] = pv[:, 1]
 
-            output['NPV'][current] = perf.npv(ys_ts, p)
-            output['PPV'][current] = perf.ppv(ys_ts, p)
-            output['SENS'][current] = perf.sensitivity(ys_ts, p)
-            output['SPEC'][current] = perf.specificity(ys_ts, p)
-            output['MCC'][current] = perf.KCCC_discrete(ys_ts, p)
-            output['AUC'][current] = roc_auc_score(ys_ts, p)
-            output['DOR'][current] = perf.dor(ys_ts, p)
-            output['ACC'][current] = perf.accuracy(ys_ts, p)
-            output['ACCint'][current] = acc
+            metrics['NPV'][current] = perf.npv(ys_ts, p)
+            metrics['PPV'][current] = perf.ppv(ys_ts, p)
+            metrics['SENS'][current] = perf.sensitivity(ys_ts, p)
+            metrics['SPEC'][current] = perf.specificity(ys_ts, p)
+            metrics['MCC'][current] = perf.KCCC_discrete(ys_ts, p)
+            metrics['AUC'][current] = roc_auc_score(ys_ts, p)
+            metrics['DOR'][current] = perf.dor(ys_ts, p)
+            metrics['ACC'][current] = perf.accuracy(ys_ts, p)
+            metrics['ACCint'][current] = acc
 
-    return output
+    _save_metrics_on_file(base_output_name, metrics)
+
+    with open(base_output_name + "_preds.txt", 'w+') as f:
+        writer = csv.writer(f, delimiter='\t', lineterminator='\n')
+        writer.writerow(inputs['sample_names'])
+        for row in metrics['PREDS']:
+            writer.writerow(row.tolist())
+
+    return metrics
