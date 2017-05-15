@@ -1,9 +1,25 @@
 import argparse
 import sys
+import configparser
+from phcnn.globalsettings import GlobalSettings
 
 import numpy as np
 
 from phylogenetic.phcnn.utils import load_datafile
+
+
+def get_configuration(config_file='config.ini'):
+
+    config_parser = configparser.ConfigParser()
+    config_parser.read(config_file)
+
+    config = {}
+
+    for section in config_parser.sections():
+        for option in config_parser.options(section):
+            config[option] = config_parser.get(section, option)
+
+    return config
 
 
 def create_parser():
@@ -89,10 +105,6 @@ def get_data(datafile,
 
 
 if __name__ == '__main__':
-    parser = create_parser()
-    if len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(1)
 
-    args = parser.parse_args()
-    print(args)
+    GlobalSettings.set(get_configuration())
+    print(GlobalSettings.settings_to_strings())

@@ -22,6 +22,7 @@ class GlobalSettings:
     validation_datafile = None
     validations_labels_datafile = None
     trials = None
+    overwrite = None
 
     @staticmethod
     def set(inputs):
@@ -29,21 +30,28 @@ class GlobalSettings:
         As input this function requires a Namespace object produced by the ArgumentParser from the argparse library.
         """
 
-        GlobalSettings.datafile = inputs.DATAFILE
-        GlobalSettings.coordinates_datafile = inputs.COORDINATES
-        GlobalSettings.label_datafile = inputs.LABELSFILE
-        GlobalSettings.scaling = inputs.SCALING
-        GlobalSettings.rank_method = inputs.RANK_METHOD
-        GlobalSettings.output_directory = inputs.OUTDIR
-        GlobalSettings.is_output_plotted = inputs.plot
-        GlobalSettings.cv_n = inputs.cv_n
-        GlobalSettings.cv_k = inputs.cv_k
-        GlobalSettings.relief_k = inputs.reliefk
-        GlobalSettings.rfe_p = inputs.rfep
-        GlobalSettings.is_quiet = inputs.quiet
-        GlobalSettings.validation_datafile = inputs.tsfile
-        GlobalSettings.validations_labels_datafile = inputs.tslab
-        GlobalSettings.trials = inputs.trials
+        GlobalSettings.datafile = inputs['data']
+        GlobalSettings.coordinates_datafile = inputs['coordinates']
+        GlobalSettings.label_datafile = inputs['labels']
+        GlobalSettings.output_directory = inputs['output_dir']
+        GlobalSettings.validation_datafile = inputs['validation_data']
+        GlobalSettings.validations_labels_datafile = inputs['validation_labels']
+
+        GlobalSettings.scaling = inputs['scaling']
+        GlobalSettings.rank_method = inputs['rank_method']
+        GlobalSettings.cv_n = int(inputs['cv_n'])
+        GlobalSettings.cv_k = int(inputs['cv_k'])
+        GlobalSettings.relief_k = int(inputs['reliefk'])
+
+        if inputs['quiet'] == 'True':
+            GlobalSettings.is_quiet = True
+        else:
+            GlobalSettings.is_quiet = False
+
+        if inputs['overwrite'] == 'True':
+            GlobalSettings.overwrite = True
+        else:
+            GlobalSettings.overwrite = False
 
     @staticmethod
     def settings_to_strings():
@@ -51,32 +59,28 @@ class GlobalSettings:
                '\nCoordinate datafile : {}' \
                '\nLabel datafile : {}' \
                '\nOutput directory : {}' \
-               '\nIs the output plotted? : {}' \
+               '\nWill overwrite output?: {}'\
                '\nScaling : {}' \
                '\nRank method : {}' \
                '\nCV_N : {}' \
                '\nCV_K : {}' \
                '\nNearest neighbors ReliefF : {}' \
-               '\nPercentage dropped per iteration of RFE : {}' \
                '\nIs quiet ?: {}' \
                '\nValidation datafile : {}' \
-               '\nValidation labels datafile : {}' \
-               '\nHypersearch trials : {}'.format(
+               '\nValidation labels datafile : {}'.format(
                             GlobalSettings.datafile,
                             GlobalSettings.coordinates_datafile,
                             GlobalSettings.label_datafile,
                             GlobalSettings.output_directory,
-                            GlobalSettings.is_output_plotted,
+                            GlobalSettings.overwrite,
                             GlobalSettings.scaling,
                             GlobalSettings.rank_method,
                             GlobalSettings.cv_n,
                             GlobalSettings.cv_k,
                             GlobalSettings.relief_k,
-                            GlobalSettings.rfe_p,
                             GlobalSettings.is_quiet,
                             GlobalSettings.validation_datafile,
                             GlobalSettings.validations_labels_datafile,
-                            GlobalSettings.trials
                             )
 
 
