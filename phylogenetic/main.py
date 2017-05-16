@@ -4,14 +4,14 @@
 import sys
 import os
 
-from input_output import get_data, create_parser, get_configuration
-from phcnn.globalsettings import GlobalSettings
+from input_output import get_data
 from phcnn.dap import dap
+from phcnn import settings
 
 
 def _creation_output_dir(output_dir):
 
-    if not GlobalSettings.overwrite and os.path.isdir(output_dir):
+    if not settings.overwrite and os.path.isdir(output_dir):
         answer = input('Output directory already existing, overwrite all files? [Y/n] ')
         if not(answer == 'Y' or answer == 'y' or answer == ''):
             sys.exit(0)
@@ -21,17 +21,18 @@ def _creation_output_dir(output_dir):
 
 def main():
 
-    GlobalSettings.set(get_configuration())
+    _creation_output_dir(settings.OUTPUT_DIR)
+    datafile = settings.TRAINING_DATA_FILEPATH
+    labels_datafile = settings.TRAINING_LABELS_FILEPATH
+    coordinates_datafile = settings.COORDINATES_FILEPATH
+    test_datafile = settings.TEST_DATA_FILEPATH
+    test_label_datafile = settings.TEST_LABELS_FILEPATH
 
-    _creation_output_dir(GlobalSettings.output_directory)
+    inputs = get_data(datafile, labels_datafile, coordinates_datafile,
+                      test_datafile, test_label_datafile)
 
-    inputs = get_data(GlobalSettings.datafile,
-                      GlobalSettings.label_datafile,
-                      GlobalSettings.coordinates_datafile,
-                      GlobalSettings.validation_datafile,
-                      GlobalSettings.validations_labels_datafile)
-
-    dap(inputs)
+    metrics = dap(inputs)
+    print(metrics)
 
 
 if __name__ == '__main__':
