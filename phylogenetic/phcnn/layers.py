@@ -2,20 +2,10 @@
 # -*- coding: utf-8 -*-
 
 from keras.models import Model
-from keras.layers import (
-    Layer,
-    Input,
-    MaxPool2D,
-    Reshape,
-    Dense,
-    Flatten,
-    Dropout,
-    Lambda
-)
+from keras.layers import Layer, Reshape, Lambda
 from keras.layers.merge import Concatenate
-from keras.layers.convolutional import (
-    Conv2D
-)
+from keras.layers.convolutional import  Conv2D
+
 from keras import backend as K
 import tensorflow as tf
 
@@ -43,7 +33,7 @@ def _euclidean_distances(X):
     return K.sqrt(d)
 
 
-class Phcnn(Conv2D):
+class PhyloConv2D(Conv2D):
 
     def __init__(self,
                  nb_neighbors,
@@ -58,7 +48,7 @@ class Phcnn(Conv2D):
                  kernel_constraint=None,
                  bias_constraint=None,
                  **kwargs):
-        super(Phcnn, self).__init__(
+        super(PhyloConv2D, self).__init__(
             filters=filters,
             kernel_size=(1, nb_neighbors),
             strides=(1, nb_neighbors),
@@ -75,7 +65,7 @@ class Phcnn(Conv2D):
         )
 
 
-class Phngb(Layer):
+class PhyloNeighbours(Layer):
 
     def __init__(self,
                  coordinates,
@@ -83,7 +73,7 @@ class Phngb(Layer):
                  nb_features,
                  **kwargs):
 
-        super(Phngb, self).__init__(**kwargs)
+        super(PhyloNeighbours, self).__init__(**kwargs)
         self.nb_neighbors = nb_neighbors
         self.nb_features = nb_features
         self.dist = _euclidean_distances(K.transpose(coordinates))
@@ -94,7 +84,7 @@ class Phngb(Layer):
                  input_shape[1] * self.nb_neighbors,
                  1)]
 
-    def call(self, inputs):
+    def call(self, inputs, **kwargs):
 
         _, neighbor_indexes = tf.nn.top_k(-self.dist, k=self.nb_neighbors)
 
@@ -116,38 +106,43 @@ class Phngb(Layer):
         return K.expand_dims(output, 3)
 
 
-def _slice_on_third(coord):
-
-    def f(x):
-        return x[:, :, coord]
-
-    return Lambda(lambda x: f(x))
-
-
 def _conv_block(conv, conv_crd, nb_neighbors, filters):
+    """
+    
+    :param conv: 
+    :param conv_crd: 
+    :param nb_neighbors: 
+    :param filters: 
+    :return: 
+    """
+
+    def ConvFilterLayer(coord):
+        def get_conv_filter(x):
+            return x[:, :, coord]
+        return Lambda(lambda x: get_conv_filter(x))
 
     xs = Reshape((conv.shape[2].value, conv.shape[3].value))(conv)
     crd = Reshape((conv_crd.shape[2].value, conv_crd.shape[3].value))(conv_crd)
 
-    xs_sliced = _slice_on_third(0)(xs)
-    crd_sliced = _slice_on_third(0)(crd)
+    xs_sliced = ConvFilterLayer(0)(xs)
+    crd_sliced = ConvFilterLayer(0)(crd)
 
-    phngb = Phngb(coordinates=crd_sliced,
-                  nb_neighbors=nb_neighbors,
-                  nb_features=crd_sliced.shape[1])
-    phcnn = Phcnn(nb_neighbors=nb_neighbors,
-                  filters=filters)
+    phngb = PhyloNeighbours(coordinates=crd_sliced,
+                            nb_neighbors=nb_neighbors,
+                            nb_features=crd_sliced.shape[1])
+    phcnn = PhyloConv2D(nb_neighbors=nb_neighbors,
+                        filters=filters)
     conv = phcnn(phngb(xs_sliced))
     conv_crd = phcnn(phngb(crd_sliced))
 
     for i in range(1, xs.shape[2].value):
-        xs_sliced = _slice_on_third(i)(xs)
-        crd_sliced = _slice_on_third(i)(crd)
-        phngb = Phngb(coordinates=crd_sliced,
-                      nb_neighbors=nb_neighbors,
-                      nb_features=crd_sliced.shape[1])
-        phcnn = Phcnn(nb_neighbors=nb_neighbors,
-                      filters=filters)
+        xs_sliced = ConvFilterLayer(i)(xs)
+        crd_sliced = ConvFilterLayer(i)(crd)
+        phngb = PhyloNeighbours(coordinates=crd_sliced,
+                                nb_neighbors=nb_neighbors,
+                                nb_features=crd_sliced.shape[1])
+        phcnn = PhyloConv2D(nb_neighbors=nb_neighbors,
+                            filters=filters)
         conv = Concatenate()([conv, phcnn(phngb(xs_sliced))])
         conv_crd = Concatenate()([conv_crd, phcnn(phngb(crd_sliced))])
 
@@ -170,25 +165,4 @@ class PhcnnBuilder(object):
 
         nb_filters = 1
 
-        x = Input(shape=(nb_features,), name="xs_input", dtype='float64')
-        coordinates = Input(shape=(nb_coordinates, nb_features), name="coordinates_input",  dtype='float64')
-        coord = coordinates[0]
 
-        phngb = Phngb(coordinates=coord,
-                      nb_neighbors=nb_neighbors,
-                      nb_features=coord.shape[1])
-        phcnn = Phcnn(nb_neighbors=nb_neighbors,
-                      filters=nb_filters)
-        conv1 = phcnn(phngb(x))
-        conv_crd1 = phcnn(phngb(coord))
-
-        conv2, conv_crd2 = _conv_block(conv1, conv_crd1, nb_neighbors=nb_neighbors, filters=nb_filters)
-        conv3, _ = _conv_block(conv2, conv_crd2, nb_neighbors=nb_neighbors, filters=nb_filters)
-
-        max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv3)
-        flatt = Flatten()(max)
-        drop = Dropout(0, 1)(Dense(units=64)(flatt))
-        output = Dense(units=nb_outputs, kernel_initializer="he_normal",
-                       activation="softmax", name='output')(drop)
-
-        return Model(inputs=[x, coordinates], outputs=output)
