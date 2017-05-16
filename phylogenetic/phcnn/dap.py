@@ -163,7 +163,7 @@ def _get_ranking(xs_tr, ys_tr, rank_method='ReliefF', seed=None):
 
 
 def _predict_classes(model, xs, coordinates, batch_size=32, verbose=1):
-    '''
+    """
     Generate class predictions for the input samples batch by batch.
     # Arguments
         x: input data, as a Numpy array or list of Numpy arrays
@@ -172,7 +172,7 @@ def _predict_classes(model, xs, coordinates, batch_size=32, verbose=1):
         verbose: verbosity mode, 0 or 1.
     # Returns
         A numpy array of class predictions.
-    '''
+    """
     prb = model.predict({'xs_input': xs,
                          'coordinates_input': coordinates},
                         batch_size=batch_size, verbose=verbose)
@@ -202,7 +202,7 @@ def _save_metrics_on_file(base_output_name, metrics):
                metrics['ACC'], fmt='%.4f', delimiter='\t')
 
 
-def DAP(inputs):
+def dap(inputs):
 
     output_path = os.path.abspath(GlobalSettings.output_directory)
     basefile_name = os.path.splitext(os.path.basename(GlobalSettings.datafile))[0]

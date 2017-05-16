@@ -2,7 +2,7 @@ class GlobalSettings:
 
     """
 
-    This object will contain the settings as parsed from command line. We need such global object since we cannot pass
+    This object will contain the settings as parsed from config file. We need such global object since we cannot pass
     parameters to the data() function required by hyperas.
 
     """
@@ -27,7 +27,9 @@ class GlobalSettings:
     @staticmethod
     def set(inputs):
         """
-        As input this function requires a Namespace object produced by the ArgumentParser from the argparse library.
+        Set the GlobalSettings with the values passed. 
+        
+        inputs: The values to be saved as current configuration.
         """
 
         GlobalSettings.datafile = inputs['data']

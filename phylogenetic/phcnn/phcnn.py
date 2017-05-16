@@ -22,6 +22,10 @@ import tensorflow as tf
 
 def _euclidean_distances(X):
     """  
+    Considering the rows of X as vectors, compute the
+    distance matrix between each pair of vectors. This is reimplementation 
+    for Keras of sklearn.metrics.pairwise.euclidean_distances 
+    
     :param coordinates: 
     :return: 
     """
@@ -29,12 +33,13 @@ def _euclidean_distances(X):
     Y = K.transpose(X)
     XX = K.expand_dims(K.sum(K.square(X), axis=1), 0)
     YY = K.transpose(XX)
+
     d = K.dot(X, Y)
     d *= -2
     d += XX
     d += YY
     d = K.maximum(d, K.constant(0, dtype=d.dtype))
-    # -- ??
+
     return K.sqrt(d)
 
 
@@ -149,15 +154,14 @@ def _conv_block(conv, conv_crd, nb_neighbors, filters):
     return conv, conv_crd
 
 
-
 class PhcnnBuilder(object):
 
     @staticmethod
     def build(nb_coordinates, nb_features, nb_outputs, nb_neighbors=2):
         """Builds a custom ResNet like architecture.
         Args:
-            xs_shape: The shape of the xs tensor in the (nb_samples, nb_features)
-            coordinates_shape: The shape of the xs tensor in the (nb_samples, nb_coordinates)
+            nb_coordinates: The number of coordinates 
+            nb_features: The number of features
             nb_outputs: The number of outputs at final softmax layer
             nb_neighbors: the number of phyloneighboors to be considered in the convolution
         Returns:

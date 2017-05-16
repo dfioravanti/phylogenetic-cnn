@@ -6,7 +6,7 @@ import os
 
 from input_output import get_data, create_parser, get_configuration
 from phcnn.globalsettings import GlobalSettings
-from phcnn.dap import DAP
+from phcnn.dap import dap
 
 
 def _creation_output_dir(output_dir):
@@ -31,7 +31,7 @@ def main():
                       GlobalSettings.validation_datafile,
                       GlobalSettings.validations_labels_datafile)
 
-    DAP(inputs)
+    dap(inputs)
 
 
 if __name__ == '__main__':
