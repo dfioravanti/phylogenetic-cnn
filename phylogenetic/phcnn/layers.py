@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from keras.models import Model
 from keras.layers import Layer, Reshape, Lambda
 from keras.layers.merge import Concatenate
 from keras.layers.convolutional import  Conv2D
