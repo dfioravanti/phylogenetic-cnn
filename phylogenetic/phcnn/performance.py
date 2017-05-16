@@ -204,6 +204,9 @@ def KCCC(x, y):
     return rk
 
 
-def KCCC_discrete(x, y):
-    X, Y = _expand(x, y)
+def KCCC_discrete(x, y, one_hot_enc=True):
+    if one_hot_enc:
+        X, Y = _expand(x, y)
+    else:
+        X, Y = x, y
     return KCCC(X, Y)
