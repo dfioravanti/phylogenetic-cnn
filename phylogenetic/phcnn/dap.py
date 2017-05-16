@@ -145,7 +145,7 @@ def _get_ranking(xs_tr, ys_tr, rank_method='ReliefF', seed=None):
     """
     if rank_method == 'random':
         ranking = np.arange(xs_tr.shape[1])
-        # np.random.seed((n * CV_K) + i) #TODO: Find out why this was here
+        np.random.seed(seed)
         np.random.shuffle(ranking)
     elif rank_method == 'ReliefF':
         relief = ReliefF(GlobalSettings.relief_k, seed=seed)
@@ -268,7 +268,7 @@ def dap(inputs):
             model.fit({'xs_input': xs_tr,
                        'coordinates_input': crd_tr},
                       {'output': ys_tr_cat},
-                      epochs=20,
+                      epochs=40,
                       verbose=2,
                       validation_data=({'xs_input': inputs['validation_xs'],
                                         'coordinates_input': crd_validation},
@@ -300,6 +300,9 @@ def dap(inputs):
             metrics['DOR'][current] = perf.dor(ys_ts, p)
             metrics['ACC'][current] = perf.accuracy(ys_ts, p)
             metrics['ACCint'][current] = acc
+
+    print("Average MCC: {}".format(np.mean(metrics['MCC'], axis=0)))
+    print("Confidence interval for MCC: {}".format(mlpy.bootstrap_ci(metrics['MCC'])))
 
     _save_metrics_on_file(base_output_name, metrics)
 

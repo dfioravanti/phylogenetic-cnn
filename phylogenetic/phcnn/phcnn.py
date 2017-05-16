@@ -168,20 +168,22 @@ class PhcnnBuilder(object):
             The keras `Model`.
         """
 
+        nb_filters = 1
+
         x = Input(shape=(nb_features,), name="xs_input", dtype='float64')
         coordinates = Input(shape=(nb_coordinates, nb_features), name="coordinates_input",  dtype='float64')
         coord = coordinates[0]
 
         phngb = Phngb(coordinates=coord,
-                      nb_neighbors=2,
+                      nb_neighbors=nb_neighbors,
                       nb_features=coord.shape[1])
         phcnn = Phcnn(nb_neighbors=nb_neighbors,
-                      filters=1)
+                      filters=nb_filters)
         conv1 = phcnn(phngb(x))
         conv_crd1 = phcnn(phngb(coord))
 
-        conv2, conv_crd2 = _conv_block(conv1, conv_crd1, nb_neighbors=2, filters=1)
-        conv3, _ = _conv_block(conv2, conv_crd2, nb_neighbors=2, filters=1)
+        conv2, conv_crd2 = _conv_block(conv1, conv_crd1, nb_neighbors=nb_neighbors, filters=nb_filters)
+        conv3, _ = _conv_block(conv2, conv_crd2, nb_neighbors=nb_neighbors, filters=nb_filters)
 
         max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv3)
         flatt = Flatten()(max)
