@@ -1,66 +1,10 @@
-import argparse
-import sys
-import configparser
-from phcnn.globalsettings import GlobalSettings
-
+from phcnn import settings
 import numpy as np
-
-from phylogenetic.phcnn.utils import load_datafile
-
-
-def get_configuration(config_file='config.ini'):
-
-    config_parser = configparser.ConfigParser()
-    config_parser.read(config_file)
-
-    config = {}
-
-    for section in config_parser.sections():
-        for option in config_parser.options(section):
-            config[option] = config_parser.get(section, option)
-
-    return config
+from phcnn.utils import load_datafile
 
 
-def create_parser():
-
-    parser = argparse.ArgumentParser(
-        description='Run a training experiment (10x5-CV fold) using Rectified Factor Networks,\
-                    Support Vector Machines, Random Forests and/or Multilayer Perceptron.',
-        fromfile_prefix_chars='@')
-
-    parser.add_argument('DATAFILE', type=str, help='Training datafile')
-    parser.add_argument('COORDINATES', type=str, help='Coordinates datafile')
-    parser.add_argument('LABELSFILE', type=str, help='Sample labels')
-    parser.add_argument('OUTDIR', type=str, help='Output directory')
-
-    parser.add_argument('--scaling', dest='SCALING', type=str, choices=['norm_l2', 'std', 'minmax', 'minmax0'],
-                        default='std', help='Scaling method (default: %(default)s)')
-    parser.add_argument('--ranking', dest='RANK_METHOD', type=str, choices=['ReliefF', 'tree', 'KBest', 'random'],
-                        default='ReliefF',
-                        help='Feature ranking method: ReliefF, extraTrees, Anova F-score,\
-                              random ranking (default: %(default)s)')
-    parser.add_argument('--cv_k', type=np.int, default=5, help='Number of CV folds (default: %(default)s)')
-    parser.add_argument('--cv_n', type=np.int, default=10, help='Number of CV cycles (default: %(default)s)')
-    parser.add_argument('--reliefk', type=np.int, default=3,
-                        help='Number of nearest neighbors for ReliefF (default: %(default)s)')
-    parser.add_argument('--rfep', type=np.float, default=0.2,
-                        help='Fraction of features to remove at each iteration in RFE\
-                            (p=0 one variable at each step, p=1 naive ranking) (default: %(default)s)')
-    parser.add_argument('--plot', action='store_true', help='Plot metric values over all training cycles')
-    parser.add_argument('--tsfile', type=str, default=None, help='Validation datafile')
-    parser.add_argument('--tslab', type=str, default=None, help='Validation labels, if available')
-    parser.add_argument('--trials', type=int, default=None, help='Number of hypersearch trials.')
-    parser.add_argument('--quiet', action='store_true', help='Run quietly (no progress info)')
-    parser.add_argument('--allfeatures', action='store_true', help='Do not perform features step')
-
-    return parser
-
-def get_data(datafile,
-             labels_datafile,
-             coordinates_datafile,
-             validation_datafile=None,
-             validation_label_datafile=None):
+def get_data(datafile, labels_datafile, coordinates_datafile,
+             test_datafile, test_label_datafile):
     """   
     :param datafile: the first row contains the names of the features,
                      the first column contains the names for the samples,
@@ -74,37 +18,31 @@ def get_data(datafile,
     
     """
 
-    feature_names, sample_names, xs = load_datafile(datafile)
+    # FIXME: Add missing parameters in the Docstring!!
+
+    feature_names, sample_names, Xs = load_datafile(datafile)
     ys = np.loadtxt(labels_datafile, dtype=np.int)
 
-    if validation_datafile is not None and validation_label_datafile is not None:
-        _, _, validation_xs = load_datafile(validation_datafile)
-        validation_ys = np.loadtxt(validation_label_datafile, dtype=np.int)
-    else:
-        validation_xs = validation_ys = None
-
+    _, _, Xs_test = load_datafile(test_datafile)
+    ys_test = np.loadtxt(test_label_datafile, dtype=np.int)
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
 
-    all_coordinates = np.zeros((xs.shape[0],) + coordinates.shape)
-    for i in range(xs.shape[0]):
-        all_coordinates[i] = np.copy(coordinates)
+    all_coordinates = np.zeros((Xs.shape[0],) + coordinates.shape)
+    for i in range(Xs.shape[0]):
+        all_coordinates[i] = coordinates
 
     return {'feature_names': feature_names,
             'sample_names': sample_names,
-            'xs': np.copy(xs),
-            'ys': np.copy(ys),
-            'validation_xs': np.copy(validation_xs),
-            'validation_ys': np.copy(validation_ys),
+            'xs': Xs,
+            'ys': ys,
+            'Xs_test': Xs_test,
+            'ys_test': ys_test,
             'coordinate_names': coordinate_names,
             'coordinates': all_coordinates,
-            'nb_samples': xs.shape[0],
-            'nb_features': xs.shape[1],
+            'nb_samples': Xs.shape[0],
+            'nb_features': Xs.shape[1],
             'nb_coordinates': coordinates.shape[0],
-            'nb_classes': len(set(ys))
+            'nb_classes': len(np.unique(ys))
             }
 
 
-if __name__ == '__main__':
-
-    GlobalSettings.set(get_configuration())
-    print(GlobalSettings.settings_to_strings())
