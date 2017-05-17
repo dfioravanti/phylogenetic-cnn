@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from keras.layers import Layer, Reshape, Lambda
+from keras.layers import Layer, Lambda
 from keras.layers.merge import Concatenate
-from keras.layers.convolutional import  Conv2D
+from keras.layers.convolutional import Conv2D
 
 from keras import backend as K
 import tensorflow as tf
@@ -15,7 +15,7 @@ def _euclidean_distances(X):
     distance matrix between each pair of vectors. This is reimplementation 
     for Keras of sklearn.metrics.pairwise.euclidean_distances 
     
-    :param coordinates: 
+    :param X: 
     :return: 
     """
 
@@ -86,23 +86,34 @@ class PhyloNeighbours(Layer):
 
     def call(self, inputs, **kwargs):
 
+        # TODO: Explain Trick!
         _, neighbor_indexes = tf.nn.top_k(-self.dist, k=self.nb_neighbors)
 
-        # Add the first feature and all its neighbors
-        output = K.expand_dims(inputs[:, :, 0], 2)
-        for nth_neighbor in range(1, self.nb_neighbors):
-            target_neighbor = neighbor_indexes[0, nth_neighbor]
-            output = K.concatenate([output,
-                                    K.expand_dims(inputs[:, :, target_neighbor], 2)
-                                    ], axis=2)
+        def _gather_along_axis(data, indices, axis=0):
+            """
+            Adapted from this function 
+            on Github: github.com/tensorflow/tensorflow/issues/206
+            
+            :param self: 
+            :param data: 
+            :param indices: 
+            :param axis: 
+            :return: 
+            """
+            if axis == 0:
+                return K.gather(data, indices)
+            rank = data.shape.ndims
+            perm = [axis] + list(range(1, axis)) + [0] + list(range(axis + 1, rank))
+            gather = K.gather(K.permute_dimensions(data, perm), indices)
+            shapes = [s.value if s.value else -1 for s in gather.shape]
+            shapes = tuple([shapes[0] * shapes[1]] + shapes[2:])
+            gather = K.reshape(gather, shapes)
+            out = K.permute_dimensions(gather, perm)
+            return out
 
         # Add all the other features and their neighbors
-        for feature in range(1, self.nb_features):
-            for nth_neighbor in range(self.nb_neighbors):
-                target_neighbor = neighbor_indexes[feature, nth_neighbor]
-                output = K.concatenate([output,
-                                        K.expand_dims(inputs[:, :, target_neighbor], 2)
-                                        ], axis=2)
+        target_neighbors = neighbor_indexes[0: self.nb_features, 0:self.nb_neighbors]
+        output = _gather_along_axis(inputs, target_neighbors, axis=2)
 
         return output
 
@@ -147,22 +158,3 @@ def _conv_block(Xs, Crd, nb_neighbors, nb_features, filters):
         Crd_new = Concatenate()([Crd_new, phcnn(phngb(Crd_sliced))])
 
     return Xs_new, Crd_new
-
-
-class PhcnnBuilder(object):
-
-    @staticmethod
-    def build(nb_coordinates, nb_features, nb_outputs, nb_neighbors=2):
-        """Builds a custom ResNet like architecture.
-        Args:
-            nb_coordinates: The number of coordinates 
-            nb_features: The number of features
-            nb_outputs: The number of outputs at final softmax layer
-            nb_neighbors: the number of phyloneighboors to be considered in the convolution
-        Returns:
-            The keras `Model`.
-        """
-
-        nb_filters = 1
-
-
