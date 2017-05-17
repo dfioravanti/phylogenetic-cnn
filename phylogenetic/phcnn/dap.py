@@ -1,14 +1,16 @@
-import csv
 import os
+import sys
 
 import numpy as np
+import pandas as pd
 import mlpy
 
 from keras import backend as K
 from keras.optimizers import Adam, RMSprop, SGD
 from keras.layers import Input
 from keras.layers.pooling import MaxPool2D
-from keras.layers.core import Dense, Flatten, Dropout
+from keras.layers.core import Dense, Flatten, Dropout, Lambda
+from keras.callbacks import ModelCheckpoint
 from .layers import PhyloConv2D, PhyloNeighbours, _conv_block
 
 from keras.models import Model
@@ -25,35 +27,79 @@ from . import settings
 from . import performance as perf
 
 
+# -- Metrics Keys
+REALPREDS1 = 'REALPREDS_1'
+REALPREDS0 = 'REALPREDS_0'
+PREDS = 'PREDS'
+ACCINT = 'ACCint'
+ACC = 'ACC'
+DOR = 'DOR'
+AUC = 'AUC'
+MCC_CI = 'MCC_CI'
+MCC = 'MCC'
+SPEC = 'SPEC'
+SENS = 'SENS'
+PPV = 'PPV'
+NPV = 'NPV'
+RANKINGS = 'ranking'
+NN_VAL_ACC = 'NN_val_acc'
+NN_ACC = 'NN_acc'
+NN_VAL_LOSS = 'NN_val_loss'
+NN_LOSS = 'NN_loss'
+
+
 def _prepare_metrics_array(cv_k, cv_n, nb_features, nb_samples):
 
     iterations = cv_k * cv_n
-    feature_sets = len(settings.feature_selection_percentage)
+    feature_steps = len(settings.feature_selection_percentage)
     if settings.include_top_feature:
-        feature_sets += 1
-    metrics_shape = (iterations, feature_sets)
+        feature_steps += 1
+    metrics_shape = (iterations, feature_steps)
     metrics = {
-        'ranking': np.empty((iterations, nb_features), dtype=np.int),
-        'NPV': np.empty(metrics_shape),
-        'PPV': np.empty(metrics_shape),
-        'SENS': np.empty(metrics_shape),
-        'SPEC': np.empty(metrics_shape),
-        'MCC': np.empty(metrics_shape),
-        'AUC': np.empty(metrics_shape),
-        'DOR': np.empty(metrics_shape),
-        'ACC': np.empty(metrics_shape),
-        'ACCint': np.empty(metrics_shape),
-        'PREDS': np.empty(metrics_shape + (nb_samples,), dtype=np.int),
-        'REALPREDS_0': np.empty(metrics_shape + (nb_samples,), dtype=np.float),
-        'REALPREDS_1': np.empty(metrics_shape + (nb_samples,), dtype=np.float)
+        RANKINGS: np.empty((iterations, nb_features), dtype=np.int),
+        NPV: np.empty(metrics_shape),
+        PPV: np.empty(metrics_shape),
+        SENS: np.empty(metrics_shape),
+        SPEC: np.empty(metrics_shape),
+        MCC: np.empty(metrics_shape),
+        MCC_CI: np.empty((feature_steps, 2)),
+        AUC: np.empty(metrics_shape),
+        DOR: np.empty(metrics_shape),
+        ACC: np.empty(metrics_shape),
+        ACCINT: np.empty(metrics_shape),
+        PREDS: np.empty(metrics_shape + (nb_samples,), dtype=np.int),
+        REALPREDS0: np.empty(metrics_shape + (nb_samples,), dtype=np.float),
+        REALPREDS1: np.empty(metrics_shape + (nb_samples,), dtype=np.float)
     }
 
-    # Initialize Flag Values
-    metrics['PREDS'][:, :, :] = -10
-    metrics['REALPREDS_0'][:, :, :] = -10
-    metrics['REALPREDS_1'][:, :, :] = -10
+    # Initialize to Flag Values
+    metrics[PREDS][:, :, :] = -10
+    metrics[REALPREDS0][:, :, :] = -10
+    metrics[REALPREDS1][:, :, :] = -10
+
+    if settings.ml_model == settings.PHCNN:
+        metrics[NN_LOSS] = np.zeros(metrics_shape + (settings.epochs,), dtype=K.floatx())
+        metrics[NN_VAL_LOSS] = np.zeros(metrics_shape + (settings.epochs,), dtype=K.floatx())
+        metrics[NN_ACC] = np.zeros(metrics_shape + (settings.epochs,), dtype=K.floatx())
+        metrics[NN_VAL_ACC] = np.zeros(metrics_shape + (settings.epochs,), dtype=K.floatx())
 
     return metrics
+
+
+def _generate_feature_steps(nb_features):
+    """
+
+    :param inputs: 
+    :return: 
+    """
+    k_features_indices = list()
+    if settings.include_top_feature:
+        k_features_indices.append(1)
+    for percentage in settings.feature_selection_percentage:
+        k = np.floor((nb_features * percentage) / 100).astype(np.int) + 1
+        k_features_indices.append(k)
+
+    return k_features_indices
 
 
 def _get_optimizer(selected_optimizer):
@@ -64,42 +110,31 @@ def _get_optimizer(selected_optimizer):
     :return: The optimizer and a dictionary containing the name and the parameter of the optimizer 
    """
 
-    if selected_optimizer == 'adam':
-        epsilon = 1e-08
-        lr = 0.001
-        beta_1 = 0.9
-        beta_2 = 0.999
+    if selected_optimizer == settings.ADAM:
+        epsilon = settings.adam_epsilon
+        lr = settings.adam_lr
+        beta_1 = settings.beta_1
+        beta_2 = settings.beta_2
         optimizer = Adam(lr=lr, beta_1=beta_1, beta_2=beta_2, epsilon=epsilon)
-        optimizer_configuration = {'name': 'adam',
-                                   'lr': lr,
-                                   'beta_1': beta_1,
-                                   'beta_2': beta_2,
-                                   'epsilon': epsilon
-                                   }
-    elif selected_optimizer == 'rmsprop':
-        epsilon = 1e-08
-        lr = 0.001
-        rho = 0.9
-        optimizer = RMSprop(lr=lr, rho=rho, epsilon=epsilon)
-        optimizer_configuration = {'name': 'rmsprop',
-                                   'lr': lr,
-                                   'rho': rho,
-                                   'epsilon': epsilon}
-    elif selected_optimizer == 'sgd':
-        nesterov = True
-        lr = 0.001
-        momentum = 0.9
-        decay = 1e-06
-        optimizer = SGD(lr=lr, momentum=momentum, decay=decay, nesterov=nesterov)
-        optimizer_configuration = {'name': 'sgd',
-                                   'lr': lr,
-                                   'momentum': momentum,
-                                   'decay': decay,
-                                   'nesterov': nesterov}
-    else:
-        raise Exception("The only supported optimizer are adam, rmsprop, sgd")
 
-    return optimizer, optimizer_configuration
+    elif selected_optimizer == settings.RMSPROP:
+        epsilon = settings.rmsprop_epsilon
+        lr = settings.rmsprop_lr
+        rho = settings.rho
+        optimizer = RMSprop(lr=lr, rho=rho, epsilon=epsilon)
+
+    elif selected_optimizer == settings.SGD:
+        nesterov = settings.nesterov
+        lr = settings.sgd_lr
+        momentum = settings.momentum
+        decay = settings.decay
+        optimizer = SGD(lr=lr, momentum=momentum, decay=decay, nesterov=nesterov)
+
+    else:
+        raise Exception("The only supported optimizer are {}, {}, {}".format(settings.RMSPROP,
+                                                                             settings.SGD, settings.ADAM))
+
+    return optimizer
 
 
 def _apply_scaling(xs_tr, xs_ts, selected_scaling):
@@ -112,18 +147,18 @@ def _apply_scaling(xs_tr, xs_ts, selected_scaling):
     :param selected_scaling: a string representing the select scaling
     :return: (xs_training, xs_ts) scaled according to the scaler. 
     """
-    if selected_scaling == 'norm_l2':
+    if selected_scaling == settings.NORM_L2:
         xs_train_scaled, m_train, r_train = norm_l2(xs_tr)
         xs_test_scaled, _, _ = norm_l2(xs_ts, m_train, r_train)
-    elif selected_scaling == 'std':
+    elif selected_scaling == settings.STD:
         scaler = preprocessing.StandardScaler(copy=False)
         xs_train_scaled = scaler.fit_transform(xs_tr)
         xs_test_scaled = scaler.transform(xs_ts)
-    elif selected_scaling == 'minmax':
+    elif selected_scaling == settings.MINMAX:
         scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1), copy=False)
         xs_train_scaled = scaler.fit_transform(xs_tr)
         xs_test_scaled = scaler.transform(xs_ts)
-    elif selected_scaling == 'minmax0':
+    elif selected_scaling == settings.MINMAX0:
         scaler = preprocessing.MinMaxScaler(feature_range=(0, 1), copy=False)
         xs_train_scaled = scaler.fit_transform(xs_tr)
         xs_test_scaled = scaler.transform(xs_ts)
@@ -133,7 +168,7 @@ def _apply_scaling(xs_tr, xs_ts, selected_scaling):
     return xs_train_scaled, xs_test_scaled
 
 
-def _get_ranking(xs_tr, ys_tr, rank_method='ReliefF', seed=None):
+def _get_ranking(xs_tr, ys_tr, rank_method=settings.RELIEFF, seed=None):
     """
     Compute the ranking of the features as required. It raises an exception 
     if a wrong rank_method name is required.  
@@ -143,16 +178,16 @@ def _get_ranking(xs_tr, ys_tr, rank_method='ReliefF', seed=None):
     :param rank_method: a string representing the selected rank method
     :return: 
     """
-    if rank_method == 'random':
+    if rank_method == settings.RANDOM:
         ranking = np.arange(xs_tr.shape[1])
         np.random.seed(seed)
         np.random.shuffle(ranking)
-    elif rank_method == 'ReliefF':
+    elif rank_method == settings.RELIEFF:
         relief = ReliefF(settings.relief_k, seed=seed)
         relief.learn(xs_tr, ys_tr)
         w = relief.w()
         ranking = np.argsort(w)[::-1]
-    elif rank_method == 'KBest':
+    elif rank_method == settings.KBEST:
         selector = SelectKBest(k=settings.kbest)
         selector.fit(xs_tr, ys_tr)
         ranking = np.argsort(-np.log10(selector.pvalues_))[::-1]
@@ -183,24 +218,60 @@ def _predict_classes(model, Xs, coordinates, batch_size=32, verbose=1):
         return prb, (prb > 0.5).astype(np.int)
 
 
-def _save_metrics_on_file(base_output_name, metrics):
+def _save_metric_to_file(output_fname, metric, columns):
+    """
+    
+    :param output_fname: 
+    :param metric: 
+    :param columns: 
+    :return: 
+    """
+    df = pd.DataFrame(metric, columns=columns)
+    df.to_csv(output_fname, sep='\t')
 
-    np.savetxt(base_output_name + "_allmetrics_NPV.txt",
-               metrics['NPV'], fmt='%.4f', delimiter='\t')
-    np.savetxt(base_output_name + "_allmetrics_PPV.txt",
-               metrics['PPV'], fmt='%.4f', delimiter='\t')
-    np.savetxt(base_output_name + "_allmetrics_SENS.txt",
-               metrics['SENS'], fmt='%.4f', delimiter='\t')
-    np.savetxt(base_output_name + "_allmetrics_SPEC.txt",
-               metrics['SPEC'], fmt='%.4f', delimiter='\t')
-    np.savetxt(base_output_name + "_allmetrics_MCC.txt",
-               metrics['MCC'], fmt='%.4f', delimiter='\t')
-    np.savetxt(base_output_name + "_allmetrics_AUC.txt",
-               metrics['AUC'], fmt='%.4f', delimiter='\t')
-    np.savetxt(base_output_name + "_allmetrics_DOR.txt",
-               metrics['DOR'], fmt='%.4f', delimiter='\t')
-    np.savetxt(base_output_name + "_allmetrics_ACC.txt",
-               metrics['ACC'], fmt='%.4f', delimiter='\t')
+
+def _save_all_metrics_to_file(base_output_fname, metrics,
+                              feature_steps, feature_names, sample_names):
+    """
+    
+    :param base_output_fname: 
+    :param metrics: 
+    :param feature_steps: 
+    :return: 
+    """
+
+    excluded = [RANKINGS, PREDS, REALPREDS1, REALPREDS0, MCC_CI,
+                NN_VAL_ACC, NN_ACC, NN_VAL_LOSS, NN_LOSS]
+    for key in metrics:
+        if not key in excluded:
+            metric_values = metrics[key]
+            _save_metric_to_file(os.path.join(base_output_fname, 'metric_{}.txt'.format(key)),
+                                 metric_values, feature_steps)
+
+    # Save Ranking
+    _save_metric_to_file(os.path.join(base_output_fname, 'metric_{}.txt'.format(RANKINGS)),
+                         metrics[RANKINGS], feature_names)
+
+    # Save MCC Confidence Intervals
+    _save_metric_to_file(os.path.join(base_output_fname, 'metric_{}.txt'.format(MCC_CI)),
+                         metrics[MCC_CI], ['Lower', 'Upper'])
+
+    # Save Composed Predictions
+    epochs_names = ['epoch {}'.format(e) for e in range(settings.epochs)]
+    headers = {
+        PREDS: sample_names,
+        REALPREDS1: sample_names,
+        REALPREDS0: sample_names,
+        NN_LOSS: epochs_names,
+        NN_VAL_ACC: epochs_names,
+        NN_VAL_LOSS: epochs_names,
+        NN_ACC: epochs_names
+    }
+    for istep, step in enumerate(feature_steps):
+        for key in [PREDS, REALPREDS0, REALPREDS1, NN_LOSS, NN_ACC, NN_VAL_LOSS, NN_VAL_ACC]:
+            header = headers[key]
+            _save_metric_to_file(os.path.join(base_output_fname, 'metric_fs{}_{}.txt'.format(step, key)),
+                                metrics[key][:, istep, :], header)
 
 
 def _adjust_dimensions(X_train, X_val, C_train, C_val):
@@ -219,6 +290,7 @@ def _adjust_dimensions(X_train, X_val, C_train, C_val):
     C_val = np.expand_dims(np.expand_dims(C_val, 2), 4)
 
     return (X_train, X_val), (C_train, C_val)
+
 
 def phylo_cnn(nb_features, nb_coordinates, nb_classes):
     """
@@ -240,7 +312,7 @@ def phylo_cnn(nb_features, nb_coordinates, nb_classes):
 
     x = Input(shape=(1, nb_features, 1), name="data", dtype='float64')
     coordinates = Input(shape=(nb_coordinates, 1, nb_features, 1), name="coordinates", dtype='float64')
-    coord = coordinates[0]
+    coord = Lambda(lambda c: c[0])(coordinates)
 
     phylo_ngb = PhyloNeighbours(coordinates=coord,
                                 nb_neighbors=nb_neighbors,
@@ -248,6 +320,7 @@ def phylo_cnn(nb_features, nb_coordinates, nb_classes):
 
     phylo_conv = PhyloConv2D(nb_neighbors=nb_neighbors,
                              filters=nb_filters)
+
     conv1 = phylo_conv(phylo_ngb(x))
     conv_crd1 = phylo_conv(phylo_ngb(coord))
 
@@ -262,7 +335,7 @@ def phylo_cnn(nb_features, nb_coordinates, nb_classes):
 
     model = Model(inputs=[x, coordinates], outputs=output)
 
-    opt, _ = _get_optimizer(settings.optimizer)
+    opt = _get_optimizer(settings.optimizer)
     model.compile(loss='categorical_crossentropy',
                   optimizer=opt,
                   metrics=['accuracy'])
@@ -273,15 +346,19 @@ def phylo_cnn(nb_features, nb_coordinates, nb_classes):
 def dap(inputs, model_fn=phylo_cnn):
 
     basefile_name = settings.DISEASE.lower()
-    base_output_name = os.path.join(settings.OUTPUT_DIR, '_'.join([basefile_name,
-                                                           settings.ml_model,
-                                                           settings.feature_ranking_method,
-                                                           settings.feature_scaling_method]))
+    base_output_folder = os.path.join(settings.OUTPUT_DIR, '_'.join([basefile_name, settings.ml_model.lower(),
+                                                                    settings.feature_ranking_method.lower(),
+                                                                    settings.feature_scaling_method.lower(),
+                                                                    str(settings.Cv_N), str(settings.Cv_K)]))
+    os.makedirs(base_output_folder, exist_ok=True)
 
     metrics = _prepare_metrics_array(settings.Cv_K,
                                      settings.Cv_N,
                                      inputs['nb_features'],
                                      inputs['nb_samples'])
+
+    # Select K-features according to the resulting ranking
+    k_features_indices = _generate_feature_steps(inputs['nb_features'])
 
     # Apply for Random Labels
     ys = inputs['ys']
@@ -316,17 +393,7 @@ def dap(inputs, model_fn=phylo_cnn):
             Xs_tr, Xs_val = _apply_scaling(Xs_tr, Xs_val, settings.feature_scaling_method)
 
             ranking = _get_ranking(Xs_tr, ys_tr, settings.feature_ranking_method, seed=n)
-            metrics['ranking'][current] = ranking # store ranking
-
-            # Select K-features according to the resulting ranking
-            nb_features = inputs['nb_features']
-
-            k_features_indices = list()
-            if settings.include_top_feature:
-                k_features_indices.append(1)
-            for percentage in settings.feature_selection_percentage:
-                k = np.floor((nb_features * percentage)/100).astype(np.int) + 1
-                k_features_indices.append(k)
+            metrics[RANKINGS][current] = ranking # store ranking
 
             for step, feature_index in enumerate(k_features_indices):
                 # Filter Training data
@@ -339,26 +406,27 @@ def dap(inputs, model_fn=phylo_cnn):
                 Coords_val_sel = Coords_val[:, :, ranking[:feature_index]]
                 nb_features_sel = Xs_tr_sel.shape[1]
 
-                if settings.ml_model == 'phcnn':
-                    (Xs_tr_sel, Xs_val_sel), (Coords_tr_sel, Coords_val_sel) = _adjust_dimensions(Xs_tr_sel, Xs_val_sel,
-                                                                                                 Coords_tr_sel,
-                                                                                                 Coords_val_sel)
+                (Xs_tr_sel, Xs_val_sel), (Coords_tr_sel, Coords_val_sel) = _adjust_dimensions(Xs_tr_sel, Xs_val_sel,
+                                                                                             Coords_tr_sel,
+                                                                                             Coords_val_sel)
 
-                    model = model_fn(nb_features=nb_features_sel, nb_coordinates=inputs['nb_coordinates'],
-                                     nb_classes=inputs['nb_classes'])
+                model = model_fn(nb_features=nb_features_sel, nb_coordinates=inputs['nb_coordinates'],
+                                 nb_classes=inputs['nb_classes'])
 
-                    model_history = model.fit({'data': Xs_tr_sel, 'coordinates': Coords_tr_sel}, {'output': Ys_tr_cat},
-                                              epochs=settings.epochs, verbose=settings.verbose,
-                                              batch_size=settings.batch_size,
-                                              validation_data=({'data': Xs_val_sel,
-                                                                'coordinates': Coords_val_sel}, {'output': Ys_val_cat}))
+                model_fname = '{}_{}_model.hdf5'.format(current, settings.feature_selection_percentage[step])
+                model_fname = os.path.join(base_output_folder, model_fname)
+                model_history = model.fit({'data': Xs_tr_sel, 'coordinates': Coords_tr_sel}, {'output': Ys_tr_cat},
+                                          epochs=settings.epochs, verbose=settings.verbose,
+                                          batch_size=settings.batch_size,
+                                          validation_data=({'data': Xs_val_sel,
+                                                            'coordinates': Coords_val_sel}, {'output': Ys_val_cat}),
+                                          callbacks=[ModelCheckpoint(filepath=model_fname, save_best_only=True,
+                                                                     save_weights_only=True),])
 
-                    score, acc = model.evaluate({'data': Xs_val_sel, 'coordinates': Coords_val_sel},
-                                                {'output': Ys_val_cat}, verbose=0)
+                score, acc = model.evaluate({'data': Xs_val_sel, 'coordinates': Coords_val_sel},
+                                            {'output': Ys_val_cat}, verbose=0)
 
-                    pv, p = _predict_classes(model, Xs_val_sel, Coords_val_sel, verbose=0)
-                else:
-                    pass
+                pv, p = _predict_classes(model, Xs_val_sel, Coords_val_sel, verbose=0)
 
                 pred_mcc = perf.KCCC_discrete(ys_val, p)
 
@@ -366,32 +434,42 @@ def dap(inputs, model_fn=phylo_cnn):
                     print('Test accuracy: {}'.format(acc))
                     print('Test MCC: {}'.format(pred_mcc))
 
-                metrics['PREDS'][current, step, idx_val] = p
-                metrics['REALPREDS_0'][current, step, idx_val] = pv[:, 0]
-                metrics['REALPREDS_1'][current, step, idx_val] = pv[:, 1]
+                # Overwrite only values corresponding to samples in the current (internal) validation set!
+                metrics[PREDS][current, step, idx_val] = p
+                metrics[REALPREDS0][current, step, idx_val] = pv[:, 0]
+                metrics[REALPREDS1][current, step, idx_val] = pv[:, 1]
 
-                metrics['NPV'][current, step] = perf.npv(ys_val, p)
-                metrics['PPV'][current, step] = perf.ppv(ys_val, p)
-                metrics['SENS'][current, step] = perf.sensitivity(ys_val, p)
-                metrics['SPEC'][current, step] = perf.specificity(ys_val, p)
-                metrics['MCC'][current, step] = pred_mcc
-                metrics['AUC'][current, step] = roc_auc_score(ys_val, p)
-                metrics['DOR'][current, step] = perf.dor(ys_val, p)
-                metrics['ACC'][current, step] = perf.accuracy(ys_val, p)
-                metrics['ACCint'][current, step] = acc
+                metrics[NPV][current, step] = perf.npv(ys_val, p)
+                metrics[PPV][current, step] = perf.ppv(ys_val, p)
+                metrics[SENS][current, step] = perf.sensitivity(ys_val, p)
+                metrics[SPEC][current, step] = perf.specificity(ys_val, p)
+                metrics[MCC][current, step] = pred_mcc
+                metrics[AUC][current, step] = roc_auc_score(ys_val, p)
+                metrics[DOR][current, step] = perf.dor(ys_val, p)
+                metrics[ACC][current, step] = perf.accuracy(ys_val, p)
+                metrics[ACCINT][current, step] = acc
 
-    # print("Average MCC: {}".format(np.mean(metrics['MCC'], axis=0)))
-    # print("Confidence interval for MCC: {}".format(mlpy.bootstrap_ci(metrics['MCC'])))
+                if settings.ml_model == 'phcnn':
+                    metrics[NN_LOSS][current, step] = model_history.history['loss']
+                    metrics[NN_VAL_LOSS][current, step] = model_history.history['val_loss']
+                    metrics[NN_ACC][current, step] = model_history.history['acc']
+                    metrics[NN_VAL_ACC][current, step] = model_history.history['val_acc']
 
-    # _save_metrics_on_file(base_output_name, metrics)
-    #
-    # with open(base_output_name + "_preds.txt", 'w+') as f:
-    #     writer = csv.writer(f, delimiter='\t', lineterminator='\n')
-    #     writer.writerow(inputs['sample_names'])
-    #     for row in metrics['PREDS']:
-    #         writer.writerow(row.tolist())
+    # Compute Confidence Intervals
+    for step in range(len(k_features_indices)):
+        metrics[MCC_CI][step] = mlpy.bootstrap_ci(metrics['MCC'][:, step])
+
+    if not settings.quiet:
+        print("Average MCC for each Feature Steps: {}".format(np.mean(metrics[MCC], axis=0)))
+        for step in range(len(k_features_indices)):
+            print("Confidence interval for MCC at feature step {}: {}".format(step, metrics[MCC_CI][step]))
+
+    # Save All Metrics to File
+    _save_all_metrics_to_file(base_output_folder, metrics, k_features_indices,
+                              inputs['feature_names'], inputs['sample_names'])
 
     return metrics
+
 
 
 
