@@ -38,9 +38,11 @@ transf_cdf <- ilr(cdf)
 vect_mean_cdf <- mean(transf_cdf)
 cov_matrix_cdf <- cov(transf_cdf)
 
+# compute means difference
+AB <- vect_mean_cdf-vect_mean_hs
+
 #compute projections
 AC <- transf_hs-vect_mean_hs
-AB <- vect_mean_cdf-vect_mean_hs
 project_hs <- AC%*%AB
 AD <- transf_cdf-vect_mean_hs
 project_cdf <- AD%*%AB
@@ -56,9 +58,8 @@ alpha <- 0
 mean1 <- mu + alpha*sigma1*vect_mean_hs/norm(vect_mean_hs,'2')
 mean2 <- mu + alpha*sigma1*vect_mean_cdf/norm(vect_mean_cdf,'2')
 
-multivariate_hs <- rmvnorm(dim(hs)[1], mean = mean1 , sigma = cov_matrix_hs, method="svd")
-multivariate_cdf <- rmvnorm(dim(cdf)[1],mean = mean2, sigma = cov_matrix_cdf, method="svd")
-#multivariate_hs <- rmvnorm(dim(hs)[1], mean = , sigma = cov_matrix_hs, method="svd")
+multivariate_hs <- rmvnorm(dim(hs)[1], mean=mean1 , sigma=cov_matrix_hs, method="svd")
+multivariate_cdf <- rmvnorm(dim(cdf)[1], mean=mean2, sigma=cov_matrix_cdf, method="svd")
 
 synthetic_data_hs <- ilrInv(multivariate_hs)
 synthetic_data_cdf <- ilrInv(multivariate_cdf)
