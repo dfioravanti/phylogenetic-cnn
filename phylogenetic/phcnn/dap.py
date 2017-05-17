@@ -307,7 +307,7 @@ def dap(inputs, model_fn=phylo_cnn):
             Xs_tr, Xs_val = inputs['xs'][idx_tr], inputs['xs'][idx_val]
             ys_tr, ys_val = ys[idx_tr], ys[idx_val]
 
-            Coords_tr, Coords_val = inputs['coordinates'][idx_tr], inputs['coordinates'][idx_val]
+            Coords_tr, Coords_val = inputs['coordinates'][:Xs_tr.shape[0]], inputs['coordinates'][:Xs_val.shape[0]]
             Ys_tr_cat = np_utils.to_categorical(ys_tr, inputs['nb_classes'])
             Ys_val_cat = np_utils.to_categorical(ys_val, inputs['nb_classes'])
 
@@ -337,9 +337,9 @@ def dap(inputs, model_fn=phylo_cnn):
                 Coords_val_sel = Coords_val[:, :, ranking[:feature_index]]
                 nb_features_sel = Xs_tr_sel.shape[1]
 
-                model, hstory = model_fn(Xs_tr_sel, Xs_val_sel, Coords_tr_sel, Coords_val_sel,
-                                         Ys_tr_cat, Ys_val_cat, nb_features_sel,
-                                         inputs['nb_coordinates'], inputs['nb_classes'])
+                model, history = model_fn(Xs_tr_sel, Xs_val_sel, Coords_tr_sel, Coords_val_sel,
+                                          Ys_tr_cat, Ys_val_cat, nb_features_sel,
+                                          inputs['nb_coordinates'], inputs['nb_classes'])
 
                 score, acc = model.evaluate({'data': Xs_val_sel,
                                              'coordinates': Coords_val_sel},

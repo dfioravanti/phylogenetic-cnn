@@ -27,9 +27,8 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
     ys_test = np.loadtxt(test_label_datafile, dtype=np.int)
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
 
-    all_coordinates = np.zeros((Xs.shape[0],) + coordinates.shape)
-    for i in range(Xs.shape[0]):
-        all_coordinates[i] = coordinates
+    all_coordinates = np.empty((Xs.shape[0],) + coordinates.shape, dtype=np.float64)
+    all_coordinates[0] = coordinates
 
     return {'feature_names': feature_names,
             'sample_names': sample_names,
