@@ -203,8 +203,24 @@ def _save_metrics_on_file(base_output_name, metrics):
                metrics['ACC'], fmt='%.4f', delimiter='\t')
 
 
-def phylo_cnn(X_train, X_val, C_train, C_val, Y_train, Y_val,
-              nb_features, nb_coordinates, nb_classes):
+def _adjust_dimensions(X_train, X_val, C_train, C_val):
+    """
+    
+    :param X_train: 
+    :param X_val: 
+    :param C_train: 
+    :param C_val: 
+    :return: 
+    """
+
+    X_train = np.expand_dims(np.expand_dims(X_train, 1), 3)
+    X_val = np.expand_dims(np.expand_dims(X_val, 1), 3)
+    C_train = np.expand_dims(np.expand_dims(C_train, 2), 4)
+    C_val = np.expand_dims(np.expand_dims(C_val, 2), 4)
+
+    return (X_train, X_val), (C_train, C_val)
+
+def phylo_cnn(nb_features, nb_coordinates, nb_classes):
     """
 
     :param X_train: 
@@ -221,13 +237,6 @@ def phylo_cnn(X_train, X_val, C_train, C_val, Y_train, Y_val,
     if nb_neighbors > nb_features:
         nb_neighbors = nb_features
     nb_filters = settings.nb_convolutional_filters
-
-    X_train = K.expand_dims(K.expand_dims(X_train, 1), 3)
-    X_val = K.expand_dims(K.expand_dims(X_val, 1), 3)
-    C_train = K.expand_dims(K.expand_dims(C_train, 2), 4)
-    C_val = K.expand_dims(K.expand_dims(C_val, 2), 4)
-    Y_train = K.expand_dims(K.expand_dims(Y_train, 1), 3)
-    Y_val = K.expand_dims(K.expand_dims(Y_val, 1), 3)
 
     x = Input(shape=(1, nb_features, 1), name="data", dtype='float64')
     coordinates = Input(shape=(nb_coordinates, 1, nb_features, 1), name="coordinates", dtype='float64')
@@ -258,11 +267,7 @@ def phylo_cnn(X_train, X_val, C_train, C_val, Y_train, Y_val,
                   optimizer=opt,
                   metrics=['accuracy'])
 
-    model_history = model.fit({'data': X_train, 'coordinates': C_train}, {'output': Y_train},
-                              epochs=40, verbose=2, batch_size=settings.batch_size,
-                              validation_data=({'data': X_val,
-                                                'coordinates': C_val}, {'output': Y_val}))
-    return model, model_history
+    return model
 
 
 def dap(inputs, model_fn=phylo_cnn):
@@ -278,6 +283,7 @@ def dap(inputs, model_fn=phylo_cnn):
                                      inputs['nb_features'],
                                      inputs['nb_samples'])
 
+    # Apply for Random Labels
     ys = inputs['ys']
     if settings.use_random_labels:
         np.random.shuffle(ys)
@@ -333,15 +339,26 @@ def dap(inputs, model_fn=phylo_cnn):
                 Coords_val_sel = Coords_val[:, :, ranking[:feature_index]]
                 nb_features_sel = Xs_tr_sel.shape[1]
 
-                model, history = model_fn(Xs_tr_sel, Xs_val_sel, Coords_tr_sel, Coords_val_sel,
-                                          Ys_tr_cat, Ys_val_cat, nb_features_sel,
-                                          inputs['nb_coordinates'], inputs['nb_classes'])
+                if settings.ml_model == 'phcnn':
+                    (Xs_tr_sel, Xs_val_sel), (Coords_tr_sel, Coords_val_sel) = _adjust_dimensions(Xs_tr_sel, Xs_val_sel,
+                                                                                                 Coords_tr_sel,
+                                                                                                 Coords_val_sel)
 
-                score, acc = model.evaluate({'data': Xs_val_sel,
-                                             'coordinates': Coords_val_sel},
-                                            {'output': Ys_val_cat}, verbose=0)
+                    model = model_fn(nb_features=nb_features_sel, nb_coordinates=inputs['nb_coordinates'],
+                                     nb_classes=inputs['nb_classes'])
 
-                pv, p = _predict_classes(model, Xs_val_sel, Coords_val_sel, verbose=0)
+                    model_history = model.fit({'data': Xs_tr_sel, 'coordinates': Coords_tr_sel}, {'output': Ys_tr_cat},
+                                              epochs=settings.epochs, verbose=settings.verbose,
+                                              batch_size=settings.batch_size,
+                                              validation_data=({'data': Xs_val_sel,
+                                                                'coordinates': Coords_val_sel}, {'output': Ys_val_cat}))
+
+                    score, acc = model.evaluate({'data': Xs_val_sel, 'coordinates': Coords_val_sel},
+                                                {'output': Ys_val_cat}, verbose=0)
+
+                    pv, p = _predict_classes(model, Xs_val_sel, Coords_val_sel, verbose=0)
+                else:
+                    pass
 
                 pred_mcc = perf.KCCC_discrete(ys_val, p)
 
