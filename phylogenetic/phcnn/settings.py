@@ -16,11 +16,22 @@ OUTPUT_DIR = os.path.join(BASE_DIR, '..', 'output')
 
 # -- Feature Scaling Method
 # Choices are: std, minmax0, norm_l2, minmax
-feature_scaling_method = 'std'
+
+# -- Feature Scaling Choices
+STD = 'std'
+MINMAX0 = 'minmax0'
+MINMAX = 'minmax'
+NORM_L2 = 'norm_l2'
+
+feature_scaling_method = STD
 
 # -- Feature Ranking Method
+
 # Choices are: ReliefF, random, KBest
-feature_ranking_method = 'ReliefF'
+RELIEFF = 'ReliefF'
+RANDOM = 'rnd'
+KBEST = 'KBest'
+feature_ranking_method = RELIEFF
 
 # Only used with ReliefF
 relief_k = 3  # K parameter for the (internal) KNN
@@ -38,7 +49,7 @@ use_random_labels = False  # Set to True to randomly shuffle training set labels
 
 # -- Cross Validation
 # No. Repetitions
-Cv_N = 2
+Cv_N = 1
 # No. Fold
 Cv_K = 2
 # Whether to apply Stratification
@@ -55,11 +66,42 @@ overwrite = True  # if True, the output_dir will be always created/overwritten r
 # -- Machine Learning Models Section
 # ============================================
 
+# -- Ml Models Choices
+PHCNN = 'phcnn'
+RF = 'rf'
+SVM = 'svm'
+
 # ML Method
 # Choices are: phcnn (Phylogenetic CNN), rf (random forest), svm (Support Vector Machine)
-ml_model = 'phcnn'
+ml_model = PHCNN
 
-# -- phcnn settings
+# - PHCNN settings -
+
+# -- Optimizers Choices
+ADAM = 'adam'
+SGD = 'sgd'
+RMSPROP = 'rmsprop'
+
+# -- Optimisers Specific Settings
+
+# == SGD ==
+nesterov = True
+sgd_lr = 0.001
+momentum = 0.9
+decay = 1e-06
+
+# == RMSPROP ==
+rmsprop_epsilon = 1e-08
+rmsprop_lr = 0.001
+rho = 0.9
+
+# == ADAM ==
+adam_epsilon = 1e-08
+adam_lr = 0.001
+beta_1 = 0.9
+beta_2 = 0.999
+
+# Fit Settings
 epochs = 2
 batch_size = 32
 optimizer = 'adam'  # Choices are: sgd, adam, rmsprop
