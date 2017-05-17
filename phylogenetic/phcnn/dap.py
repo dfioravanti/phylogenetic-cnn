@@ -282,7 +282,9 @@ def dap(inputs, model_fn=phylo_cnn):
                                      inputs['nb_features'],
                                      inputs['nb_samples'])
 
-    ## Random Shuffling of Training labels
+    ys = inputs['ys']
+    if settings.use_random_labels:
+        np.random.shuffle(ys)
 
     for n in range(settings.Cv_N):
         idx = mlpy.cv_kfold(n=inputs['nb_samples'],
@@ -303,7 +305,7 @@ def dap(inputs, model_fn=phylo_cnn):
                 print('-- ranking the features using: {}'.format(settings.feature_scaling_method))
 
             Xs_tr, Xs_val = inputs['xs'][idx_tr], inputs['xs'][idx_val]
-            ys_tr, ys_val = inputs['ys'][idx_tr], inputs['ys'][idx_val]
+            ys_tr, ys_val = ys[idx_tr], ys[idx_val]
 
             Coords_tr, Coords_val = inputs['coordinates'][idx_tr], inputs['coordinates'][idx_val]
             Ys_tr_cat = np_utils.to_categorical(ys_tr, inputs['nb_classes'])
