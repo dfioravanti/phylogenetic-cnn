@@ -1,4 +1,3 @@
-from phcnn import settings
 import numpy as np
 from phcnn.utils import load_datafile
 
@@ -13,12 +12,11 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
     :param coordinates_datafile: the first row contains the names of the features (we discard this since is redundant),
                                the first column contains the names for the coordinate (1,...,n for some n),
                                the remaining entries are the coordinates
-       
-    :return: A dictionary with all the data required by phcnn.
+    :param test_datafile: same structure as datafile, but it contains the test data
+    :param test_label_datafile: same structure as labels_test_datafile, but it contains the test labels
+    :return: A dictionary with all the data required by phcnn
     
     """
-
-    # FIXME: Add missing parameters in the Docstring!!
 
     feature_names, sample_names, Xs = load_datafile(datafile)
     ys = np.loadtxt(labels_datafile, dtype=np.int)
