@@ -64,6 +64,7 @@ epochs = 2
 batch_size = 32
 optimizer = 'adam'  # Choices are: sgd, adam, rmsprop
 nb_phyloconv_layers = 2
+verbose = 2 if quiet else 1
 
 # No. of Convolutional Filters to use.
 # Note: This could be either a number (scalar) or a list. If scalar, the **same** number will
