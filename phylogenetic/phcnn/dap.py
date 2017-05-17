@@ -4,6 +4,7 @@ import os
 import numpy as np
 import mlpy
 
+from keras import backend as K
 from keras.optimizers import Adam, RMSprop, SGD
 from keras.layers import Input
 from keras.layers.pooling import MaxPool2D
@@ -48,15 +49,11 @@ def _prepare_metrics_array(cv_k, cv_n, nb_features, nb_samples):
     }
 
     # Initialize Flag Values
-    metrics['PREDS'][:,:,:] = -10
+    metrics['PREDS'][:, :, :] = -10
     metrics['REALPREDS_0'][:, :, :] = -10
     metrics['REALPREDS_1'][:, :, :] = -10
 
     return metrics
-
-
-class _OptimizerNotFound(Exception):
-    pass
 
 
 def _get_optimizer(selected_optimizer):
@@ -100,13 +97,9 @@ def _get_optimizer(selected_optimizer):
                                    'decay': decay,
                                    'nesterov': nesterov}
     else:
-        raise _OptimizerNotFound("The only supported optimizer are adam, rmsprop, sgd")
+        raise Exception("The only supported optimizer are adam, rmsprop, sgd")
 
     return optimizer, optimizer_configuration
-
-
-class _ScalingNotFound(Exception):
-    pass
 
 
 def _apply_scaling(xs_tr, xs_ts, selected_scaling):
@@ -135,13 +128,9 @@ def _apply_scaling(xs_tr, xs_ts, selected_scaling):
         xs_train_scaled = scaler.fit_transform(xs_tr)
         xs_test_scaled = scaler.transform(xs_ts)
     else:
-        raise _ScalingNotFound("The only supported scaling are norm_l2, std, minmax, minmax0")
+        raise Exception("The only supported scaling are norm_l2, std, minmax, minmax0")
 
     return xs_train_scaled, xs_test_scaled
-
-
-class _RankingNotFound(Exception):
-    pass
 
 
 def _get_ranking(xs_tr, ys_tr, rank_method='ReliefF', seed=None):
@@ -168,7 +157,7 @@ def _get_ranking(xs_tr, ys_tr, rank_method='ReliefF', seed=None):
         selector.fit(xs_tr, ys_tr)
         ranking = np.argsort(-np.log10(selector.pvalues_))[::-1]
     else:
-        raise _RankingNotFound("The only supported Ranking are random, ReliefF, KBest")
+        raise Exception("The only supported Ranking are random, ReliefF, KBest")
 
     return ranking
 
@@ -233,21 +222,28 @@ def phylo_cnn(X_train, X_val, C_train, C_val, Y_train, Y_val,
         nb_neighbors = nb_features
     nb_filters = settings.nb_convolutional_filters
 
-    x = Input(shape=(nb_features,), name="data", dtype='float64')
-    coordinates = Input(shape=(nb_coordinates, nb_features), name="coordinates", dtype='float64')
+    X_train = K.expand_dims(K.expand_dims(X_train, 1), 3)
+    X_val = K.expand_dims(K.expand_dims(X_val, 1), 3)
+    C_train = K.expand_dims(K.expand_dims(C_train, 2), 4)
+    C_val = K.expand_dims(K.expand_dims(C_val, 2), 4)
+    Y_train = K.expand_dims(K.expand_dims(Y_train, 1), 3)
+    Y_val = K.expand_dims(K.expand_dims(Y_val, 1), 3)
+
+    x = Input(shape=(1, nb_features, 1), name="data", dtype='float64')
+    coordinates = Input(shape=(nb_coordinates, 1, nb_features, 1), name="coordinates", dtype='float64')
     coord = coordinates[0]
 
     phylo_ngb = PhyloNeighbours(coordinates=coord,
                                 nb_neighbors=nb_neighbors,
-                                nb_features=coord.shape[1])
+                                nb_features=nb_features)
 
     phylo_conv = PhyloConv2D(nb_neighbors=nb_neighbors,
                              filters=nb_filters)
     conv1 = phylo_conv(phylo_ngb(x))
     conv_crd1 = phylo_conv(phylo_ngb(coord))
 
-    conv2, conv_crd2 = _conv_block(conv1, conv_crd1, nb_neighbors=nb_neighbors, filters=nb_filters)
-    conv3, _ = _conv_block(conv2, conv_crd2, nb_neighbors=nb_neighbors, filters=nb_filters)
+    conv2, conv_crd2 = _conv_block(conv1, conv_crd1, nb_neighbors, nb_features, nb_filters)
+    conv3, _ = _conv_block(conv2, conv_crd2, nb_neighbors, nb_features, nb_filters)
 
     max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv3)
     flatt = Flatten()(max)

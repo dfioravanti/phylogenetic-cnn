@@ -75,77 +75,78 @@ class PhyloNeighbours(Layer):
         super(PhyloNeighbours, self).__init__(**kwargs)
         self.nb_neighbors = nb_neighbors
         self.nb_features = nb_features
-        self.dist = _euclidean_distances(K.transpose(coordinates))
+        crd = K.reshape(coordinates, (coordinates.shape[0].value, coordinates.shape[2].value))
+        self.dist = _euclidean_distances(K.transpose(crd))
 
     def compute_output_shape(self, input_shape):
         return [(input_shape[0],
-                 1,
-                 input_shape[1] * self.nb_neighbors,
-                 1)]
+                 input_shape[1],
+                 input_shape[2] * self.nb_neighbors,
+                 input_shape[3])]
 
     def call(self, inputs, **kwargs):
 
         _, neighbor_indexes = tf.nn.top_k(-self.dist, k=self.nb_neighbors)
 
-        output = K.expand_dims(inputs[:, 0], 1)
-        for nth_neighbor in range(self.nb_neighbors):
+        # Add the first feature and all its neighbors
+        output = K.expand_dims(inputs[:, :, 0], 2)
+        for nth_neighbor in range(1, self.nb_neighbors):
             target_neighbor = neighbor_indexes[0, nth_neighbor]
             output = K.concatenate([output,
-                                    K.expand_dims(inputs[:, target_neighbor], 1)
-                                    ], axis=1)
+                                    K.expand_dims(inputs[:, :, target_neighbor], 2)
+                                    ], axis=2)
 
+        # Add all the other features and their neighbors
         for feature in range(1, self.nb_features):
             for nth_neighbor in range(self.nb_neighbors):
                 target_neighbor = neighbor_indexes[feature, nth_neighbor]
                 output = K.concatenate([output,
-                                        K.expand_dims(inputs[:, target_neighbor], 1)
-                                        ], axis=1)
+                                        K.expand_dims(inputs[:, :, target_neighbor], 2)
+                                        ], axis=2)
 
-        output = K.expand_dims(output, 1)
-        return K.expand_dims(output, 3)
+        return output
 
 
-def _conv_block(conv, conv_crd, nb_neighbors, filters):
+def _conv_block(Xs, Crd, nb_neighbors, nb_features, filters):
+
     """
     
-    :param conv: 
-    :param conv_crd: 
+    :param Xs: 
+    :param Crd: 
     :param nb_neighbors: 
+    :param nb_features: 
     :param filters: 
     :return: 
     """
 
     def ConvFilterLayer(coord):
         def get_conv_filter(x):
-            return x[:, :, coord]
+            return K.expand_dims(x[:, :, :, coord], 3)
         return Lambda(lambda x: get_conv_filter(x))
 
-    xs = Reshape((conv.shape[2].value, conv.shape[3].value))(conv)
-    crd = Reshape((conv_crd.shape[2].value, conv_crd.shape[3].value))(conv_crd)
+    Xs_sliced = ConvFilterLayer(0)(Xs)
+    Crd_sliced = ConvFilterLayer(0)(Crd)
 
-    xs_sliced = ConvFilterLayer(0)(xs)
-    crd_sliced = ConvFilterLayer(0)(crd)
-
-    phngb = PhyloNeighbours(coordinates=crd_sliced,
+    phngb = PhyloNeighbours(coordinates=Crd_sliced,
                             nb_neighbors=nb_neighbors,
-                            nb_features=crd_sliced.shape[1])
+                            nb_features=nb_features)
     phcnn = PhyloConv2D(nb_neighbors=nb_neighbors,
                         filters=filters)
-    conv = phcnn(phngb(xs_sliced))
-    conv_crd = phcnn(phngb(crd_sliced))
+    Xs_new = phcnn(phngb(Xs_sliced))
+    Crd_new = phcnn(phngb(Crd_sliced))
 
-    for i in range(1, xs.shape[2].value):
-        xs_sliced = ConvFilterLayer(i)(xs)
-        crd_sliced = ConvFilterLayer(i)(crd)
-        phngb = PhyloNeighbours(coordinates=crd_sliced,
+    for i in range(1, Xs.shape[3].value):
+        Xs_sliced = ConvFilterLayer(i)(Xs)
+        Crd_sliced = ConvFilterLayer(i)(Crd)
+        phngb = PhyloNeighbours(coordinates=Crd_sliced,
                                 nb_neighbors=nb_neighbors,
-                                nb_features=crd_sliced.shape[1])
+                                nb_features=nb_features)
         phcnn = PhyloConv2D(nb_neighbors=nb_neighbors,
                             filters=filters)
-        conv = Concatenate()([conv, phcnn(phngb(xs_sliced))])
-        conv_crd = Concatenate()([conv_crd, phcnn(phngb(crd_sliced))])
+        Xs_new = Concatenate()([Xs_new, phcnn(phngb(Xs_sliced))])
+        Crd_new = Concatenate()([Crd_new, phcnn(phngb(Crd_sliced))])
 
-    return conv, conv_crd
+    return Xs_new, Crd_new
 
 
 class PhcnnBuilder(object):
