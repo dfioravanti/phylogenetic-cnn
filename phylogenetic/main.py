@@ -31,9 +31,7 @@ def main():
     inputs = get_data(datafile, labels_datafile, coordinates_datafile,
                       test_datafile, test_label_datafile)
 
-    metrics = dap(inputs)
-    print(metrics)
-
+    dap_model = dap(inputs)
 
 if __name__ == '__main__':
     main()

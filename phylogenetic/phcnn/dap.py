@@ -298,6 +298,13 @@ def _load_conv_information():
     return dims_conv_filters, dims_phylo_neighbours
 
 
+def _get_optimal_nb_features(MCCS, k_features_indices):
+
+    AMCC = np.average(MCCS, axis=0)
+    max_index = np.argmax(AMCC)
+    return k_features_indices[max_index]
+
+
 def phylo_cnn(nb_features, nb_coordinates, nb_classes):
     """
 
@@ -353,14 +360,68 @@ def phylo_cnn(nb_features, nb_coordinates, nb_classes):
     return model
 
 
-def dap(inputs, model_fn=phylo_cnn):
+def _get_dap_model(inputs, nb_features, model_fn=phylo_cnn, base_output_folder=None):
 
+    if base_output_folder is None:
+        base_output_folder = _get_output_folder_name()
+
+    Xs_tr = inputs['Xs']
+    ys_tr = inputs['ys']
+    ys_tr_cat = np_utils.to_categorical(ys_tr, inputs['nb_classes'])
+
+    if not settings.quiet:
+        print('=' * 80)
+        print('Beginning test')
+        print('-- centering and normalization using: {}'.format(settings.feature_scaling_method))
+
+    Xs_tr, Xs_ts = _apply_scaling(Xs_tr, Xs_ts, settings.feature_scaling_method)
+
+    if not settings.quiet:
+        print('-- ranking the features using: {}'.format(settings.feature_scaling_method))
+
+    ranking = _get_ranking(Xs_tr, ys_tr, settings.feature_ranking_method, seed=1234)
+
+    Xs_tr_sel = Xs_tr[ranking[:nb_features]]
+    Xs_ts_sel = Xs_ts[ranking[:nb_features]]
+    Coords_tr_sel = inputs['coordinates'][:Xs_tr_sel.shape[0]]
+
+    model = model_fn(nb_features=nb_features, nb_coordinates=inputs['nb_coordinates'],
+                     nb_classes=inputs['nb_classes'])
+
+    if not settings.quiet:
+        print(model.summary())
+
+    model_fname = os.path.join(base_output_folder, 'dap_model.hdf5')
+    model_history = model.fit({'data': Xs_tr_sel, 'coordinates': Coords_tr_sel}, {'output': ys_tr_cat},
+                              epochs=settings.epochs, verbose=settings.verbose,
+                              batch_size=settings.batch_size,
+                              callbacks=[ModelCheckpoint(filepath=model_fname, save_best_only=True,
+                                                         save_weights_only=True), ])
+
+    epochs_names = ['epoch {}'.format(e) for e in range(settings.epochs)]
+    _save_metric_to_file(os.path.join(base_output_folder, 'dap_loss.txt'),
+                         model_history.history['loss'][np.newaxis, :], epochs_names)
+    _save_metric_to_file(os.path.join(base_output_folder, 'dap_acc.txt'),
+                         model_history.history['acc'][np.newaxis, :], epochs_names)
+
+    return model
+
+
+def _get_output_folder_name():
     basefile_name = settings.DISEASE.lower()
     base_output_folder = os.path.join(settings.OUTPUT_DIR, '_'.join([basefile_name, settings.ml_model.lower(),
-                                                                    settings.feature_ranking_method.lower(),
-                                                                    settings.feature_scaling_method.lower(),
-                                                                    str(settings.Cv_N), str(settings.Cv_K)]))
+                                                                     settings.feature_ranking_method.lower(),
+                                                                     settings.feature_scaling_method.lower(),
+                                                                     str(settings.Cv_N), str(settings.Cv_K)]))
+
     os.makedirs(base_output_folder, exist_ok=True)
+
+    return base_output_folder
+
+
+def dap(inputs, model_fn=phylo_cnn):
+
+    base_output_folder = _get_output_folder_name()
 
     metrics = _prepare_metrics_array(settings.Cv_K,
                                      settings.Cv_N,
@@ -378,7 +439,7 @@ def dap(inputs, model_fn=phylo_cnn):
     for n in range(settings.Cv_N):
         idx = mlpy.cv_kfold(n=inputs['nb_samples'],
                             k=settings.Cv_K,
-                            strat=inputs['ys'],
+                            strat=ys,
                             seed=n)
         print('=' * 80)
         print('{} over {} experiments'.format(n + 1, settings.Cv_N))
@@ -480,8 +541,6 @@ def dap(inputs, model_fn=phylo_cnn):
     _save_all_metrics_to_file(base_output_folder, metrics, k_features_indices,
                               inputs['feature_names'], inputs['sample_names'])
 
-    return metrics
+    optimal_nb_features = _get_optimal_nb_features(metrics[MCC], k_features_indices)
 
-
-
-
+    return _get_dap_model(inputs, optimal_nb_features)
