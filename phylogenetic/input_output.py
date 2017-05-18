@@ -1,5 +1,6 @@
 import numpy as np
 from phcnn.utils import load_datafile
+from sklearn.datasets.base import Bunch
 
 
 def get_data(datafile, labels_datafile, coordinates_datafile,
@@ -28,18 +29,18 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
     all_coordinates = np.empty((Xs.shape[0],) + coordinates.shape, dtype=np.float64)
     all_coordinates[0] = coordinates
 
-    return {'feature_names': feature_names,
-            'sample_names': sample_names,
-            'xs': Xs,
-            'ys': ys,
-            'Xs_test': Xs_test,
-            'ys_test': ys_test,
-            'coordinate_names': coordinate_names,
-            'coordinates': all_coordinates,
-            'nb_samples': Xs.shape[0],
-            'nb_features': Xs.shape[1],
-            'nb_coordinates': coordinates.shape[0],
-            'nb_classes': len(np.unique(ys))
-            }
-
+    inputs = Bunch()
+    inputs.feature_names = feature_names
+    inputs.sample_names = sample_names
+    inputs.xs = Xs
+    inputs.ys = ys
+    inputs.Xs_test = Xs_test
+    inputs.ys_test = ys_test
+    inputs.coordinate_names = coordinate_names
+    inputs.coordinates = all_coordinates
+    inputs.nb_samples = Xs.shape[0]
+    inputs.nb_features = Xs.shape[1]
+    inputs.nb_coordinates = coordinates.shape[0]
+    inputs.nb_classes = len(np.unique(ys))
+    return inputs
 
