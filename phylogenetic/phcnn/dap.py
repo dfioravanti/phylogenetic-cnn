@@ -274,22 +274,10 @@ def _save_all_metrics_to_file(base_output_fname, metrics,
                                 metrics[key][:, istep, :], header)
 
 
-def _adjust_dimensions(X_train, X_val, C_train, C_val):
-    """
-    
-    :param X_train: 
-    :param X_val: 
-    :param C_train: 
-    :param C_val: 
-    :return: 
-    """
+def _adjust_dimensions(Xs, Coord):
 
-    X_train = np.expand_dims(np.expand_dims(X_train, 1), 3)
-    X_val = np.expand_dims(np.expand_dims(X_val, 1), 3)
-    C_train = np.expand_dims(np.expand_dims(C_train, 2), 4)
-    C_val = np.expand_dims(np.expand_dims(C_val, 2), 4)
-
-    return (X_train, X_val), (C_train, C_val)
+    return (np.expand_dims(np.expand_dims(Xs, 1), 3),
+            np.expand_dims(np.expand_dims(Coord, 2), 4))
 
 
 def phylo_cnn(nb_features, nb_coordinates, nb_classes):
@@ -406,9 +394,8 @@ def dap(inputs, model_fn=phylo_cnn):
                 Coords_val_sel = Coords_val[:, :, ranking[:feature_index]]
                 nb_features_sel = Xs_tr_sel.shape[1]
 
-                (Xs_tr_sel, Xs_val_sel), (Coords_tr_sel, Coords_val_sel) = _adjust_dimensions(Xs_tr_sel, Xs_val_sel,
-                                                                                             Coords_tr_sel,
-                                                                                             Coords_val_sel)
+                Xs_tr_sel, Coords_tr_sel = _adjust_dimensions(Xs_tr_sel, Coords_tr_sel)
+                Xs_val_sel, Coords_val_sel = _adjust_dimensions(Xs_val_sel, Coords_val_sel)
 
                 model = model_fn(nb_features=nb_features_sel, nb_coordinates=inputs['nb_coordinates'],
                                  nb_classes=inputs['nb_classes'])
