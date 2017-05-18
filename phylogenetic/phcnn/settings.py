@@ -111,12 +111,12 @@ verbose = 2 if quiet else 1
 # No. of Convolutional Filters to use.
 # Note: This could be either a number (scalar) or a list. If scalar, the **same** number will
 # be used for all the PhyloConv Layers
-nb_convolutional_filters = 2
+dims_convolutional_filters = [2, 4]
 
 # No. of Neighbours
 # Note: This could be either a number (scalar) or a list. If scalar, the **same** number will
 # be used for all the PhyloConv Layers
-nb_phylo_neighbours = 2  # No. Neighbours
+dims_phylo_neighbours = [2, 8]  # No. Neighbours
 
 # -- rf settings
 

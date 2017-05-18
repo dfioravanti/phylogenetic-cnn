@@ -280,6 +280,24 @@ def _adjust_dimensions(Xs, Coord):
             np.expand_dims(np.expand_dims(Coord, 2), 4))
 
 
+def _to_list(e):
+    if isinstance(e, list):
+        return e
+    return [e]
+
+
+def _load_conv_information():
+
+    dims_conv_filters = _to_list(settings.dims_convolutional_filters)
+    dims_phylo_neighbours = _to_list(settings.dims_phylo_neighbours)
+
+    if len(dims_conv_filters) != len(dims_phylo_neighbours):
+       raise Exception("dims_convolutional_filters and dims_phylo_neighbours must" \
+                       " have the same length. Check the config file")
+
+    return dims_conv_filters, dims_phylo_neighbours
+
+
 def phylo_cnn(nb_features, nb_coordinates, nb_classes):
     """
 
@@ -293,29 +311,33 @@ def phylo_cnn(nb_features, nb_coordinates, nb_classes):
     :param nb_coordinates: 
     :return: 
     """
-    nb_neighbors = settings.nb_phylo_neighbours
-    if nb_neighbors > nb_features:
-        nb_neighbors = nb_features
-    nb_filters = settings.nb_convolutional_filters
+
+    dims_conv_filters, dims_phylo_neighbours = _load_conv_information()
 
     x = Input(shape=(1, nb_features, 1), name="data", dtype='float64')
     coordinates = Input(shape=(nb_coordinates, 1, nb_features, 1), name="coordinates", dtype='float64')
-    coord = Lambda(lambda c: c[0])(coordinates)
 
-    phylo_ngb = PhyloNeighbours(coordinates=coord,
-                                nb_neighbors=nb_neighbors,
-                                nb_features=nb_features)
+    # nb_filters = dims_conv_filters[0]
+    # nb_neighbors = dims_conv_filters[0]
+    # # TODO: Fix this one. Probably is better just throw an exception
+    # if nb_neighbors > nb_features:
+    #     nb_neighbors = nb_features
+    # phylo_ngb = PhyloNeighbours(coordinates=coord,
+    #                             nb_neighbors=nb_neighbors,
+    #                             nb_features=nb_features)
+    #
+    # phylo_conv = PhyloConv2D(nb_neighbors=nb_neighbors,
+    #                          filters=nb_filters)
+    # conv = phylo_conv(phylo_ngb(x))
+    # conv_crd = phylo_conv(phylo_ngb(coord))
 
-    phylo_conv = PhyloConv2D(nb_neighbors=nb_neighbors,
-                             filters=nb_filters)
+    conv = x
+    conv_crd = Lambda(lambda c: c[0])(coordinates)
 
-    conv1 = phylo_conv(phylo_ngb(x))
-    conv_crd1 = phylo_conv(phylo_ngb(coord))
+    for nb_filters, nb_neighbors in zip(dims_conv_filters, dims_phylo_neighbours):
+        conv, conv_crd = _conv_block(conv, conv_crd, nb_neighbors, nb_features, nb_filters)
 
-    conv2, conv_crd2 = _conv_block(conv1, conv_crd1, nb_neighbors, nb_features, nb_filters)
-    conv3, _ = _conv_block(conv2, conv_crd2, nb_neighbors, nb_features, nb_filters)
-
-    max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv3)
+    max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv)
     flatt = Flatten()(max)
     drop = Dropout(0, 1)(Dense(units=64)(flatt))
     output = Dense(units=nb_classes, kernel_initializer="he_normal",
@@ -399,6 +421,9 @@ def dap(inputs, model_fn=phylo_cnn):
 
                 model = model_fn(nb_features=nb_features_sel, nb_coordinates=inputs['nb_coordinates'],
                                  nb_classes=inputs['nb_classes'])
+
+                if not settings.quiet:
+                    print(model.summary())
 
                 model_fname = '{}_{}_model.hdf5'.format(current, settings.feature_selection_percentage[step])
                 model_fname = os.path.join(base_output_folder, model_fname)
