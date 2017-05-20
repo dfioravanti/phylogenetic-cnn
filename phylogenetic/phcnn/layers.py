@@ -294,7 +294,7 @@ class PhyloNeighbours(Layer):
         return output
 
 
-def _conv_block(Xs, Crd, nb_neighbors, nb_features, filters):
+def phylo_convutional_block(Xs, Crd, nb_neighbors, nb_features, filters):
 
     """
     Helper function that creates and execute a phylo-convolutional step on all the data
