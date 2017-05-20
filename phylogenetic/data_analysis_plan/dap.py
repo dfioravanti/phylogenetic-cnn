@@ -1,5 +1,7 @@
-import os
+"""Main module implementing Data Analysis Plan
+"""
 
+import os
 import mlpy
 import numpy as np
 import pandas as pd
@@ -7,7 +9,10 @@ import pandas as pd
 from keras.utils import np_utils
 
 from . import settings
-from .performance import npv, ppv, sensitivity, specificity, KCCC_discrete, dor, accuracy
+from .scaling import get_feature_scaling_name
+from .ranking import get_feature_ranking_name
+from .performance import (npv, ppv, sensitivity, specificity,
+                          KCCC_discrete, dor, accuracy)
 from sklearn.metrics import roc_auc_score
 
 from keras.callbacks import ModelCheckpoint
@@ -87,21 +92,24 @@ class DAP(ABC):
         # ML model to be used in the `fit_predict` step.
         self.ml_model_ = None
 
-        # -- Contextual Information: Attributes saving information on the
-        # context of the DAP process, namely the reference to the iteration no. of the
-        # CV, and corresponding feature step. These information will be updated
-        # throughout the execution of the process, keeping track of actual progresses.
-
+        # Contextual Information:
+        # -----------------------
+        # Attributes saving information on the context of the DAP process,
+        # namely the reference to the iteration no. of the CV,
+        # corresponding feature step, and so on.
+        # This information will be updated throughout the execution of the process,
+        # keeping track of current actual progresses.
+        self._fold_training_indices = None  # indices of samples in training set
+        self._fold_validation_indices = None  # indices of samples in validation set
         self._iteration_step_no = -1
         self._feature_step_no = -1
-        # Store the actual number of features used during each iteration
-        # and each feature step.
+        # Store the number of features in each iteration/feature step.
+        self._nb_features = -1
         # Note: This attribute is not really used in this general DAP process,
         # although this is paramount for its DeepLearning extension.
         # In fact it is mandatory to know
-        # the total number of features to use so to properly
-        # set the shape of the first InputLayer.
-        self._nb_features = -1
+        # the total number of features to be used so to properly
+        # set the shape of the first InputLayer(s).
 
     @property
     def ml_model(self):
@@ -109,6 +117,18 @@ class DAP(ABC):
         if not self.ml_model_:
             self.ml_model_ = self._create_ml_model()
         return self.ml_model_
+
+    @property
+    def feature_scaling_name(self):
+        if isinstance(self.feature_scaler, str):
+            return self.feature_scaler
+        return get_feature_scaling_name(self.feature_scaler)
+
+    @property
+    def feature_ranking_name(self):
+        if isinstance(self.feature_ranker, str):
+            return self.feature_ranker
+        return get_feature_ranking_name(self.feature_ranker)
 
     # ====== Abstract Methods ======
     #
@@ -764,8 +784,10 @@ class DAP(ABC):
                 print('{} over {} experiments'.format(runstep + 1, self.cv_n))
 
             for fold, (training_indices, validation_indices) in enumerate(kfold_indices):
-
+                # Save contextual information
                 self._iteration_step_no = runstep * self.cv_k + fold
+                self._fold_training_indices = training_indices
+                self._fold_validation_indices = validation_indices
 
                 if verbose:
                     print('=' * 80)
@@ -778,12 +800,12 @@ class DAP(ABC):
                 # 2.1 Apply Feature Scaling (if needed)
                 if self.apply_feature_scaling:
                     if verbose:
-                        print('-- centering and normalization using: {}'.format(str(self.feature_scaler)))
+                        print('-- centering and normalization using: {}'.format(self.feature_scaling_name))
                     X_train, X_validation = self._apply_scaling(X_train, X_validation)
 
                 # 3. Apply Feature Ranking
                 if verbose:
-                    print('-- ranking the features using: {}'.format(str(self.feature_ranker)))
+                    print('-- ranking the features using: {}'.format(self.feature_ranking_name))
                 ranking = self._apply_feature_ranking(X_train, y_train, seed=runstep)
                 self.metrics[self.RANKINGS][self._iteration_step_no] = ranking  # store ranking
 
