@@ -5,13 +5,9 @@ import numpy as np
 import pandas as pd
 
 from keras.utils import np_utils
-from keras.optimizers import Adam, RMSprop, SGD
 
 from . import settings
 from .performance import npv, ppv, sensitivity, specificity, KCCC_discrete, dor, accuracy
-from .relief import ReliefF
-from sklearn.preprocessing import Normalizer, StandardScaler, MinMaxScaler
-from sklearn.feature_selection import SelectKBest
 from sklearn.metrics import roc_auc_score
 
 from keras.callbacks import ModelCheckpoint
@@ -34,10 +30,8 @@ class DAP(ABC):
     NPV = 'NPV'
     RANKINGS = 'ranking'
     PREDS = 'PREDS'
-    REALPREDS0 = 'REALPREDS_0'
-    REALPREDS1 = 'REALPREDS_1'
 
-    BASE_METRICS = [ACC, DOR, AUC, MCC, SPEC, SENS, PPV, NPV, RANKINGS, PREDS, REALPREDS0, REALPREDS1]
+    BASE_METRICS = [ACC, DOR, AUC, MCC, SPEC, SENS, PPV, NPV, RANKINGS, PREDS]
 
     # Confidence Intervals
     MCC_CI = 'MCC_CI'
@@ -67,16 +61,16 @@ class DAP(ABC):
         # Map DAP configurations from settings to class attributes
         self.cv_k = settings.Cv_K
         self.cv_n = settings.Cv_N
-        self.ranking_method = settings.feature_ranking_method
-        self.scaling_method = settings.feature_scaling_method
+        self.feature_ranker = settings.feature_ranker
+        self.feature_scaler = settings.feature_scaler
         self.random_labels = settings.use_random_labels
         self.is_stratified = settings.stratified
         self.to_categorical = settings.to_categorical
         self.apply_feature_scaling = settings.apply_feature_scaling
 
         self.iteration_steps = self.cv_k * self.cv_n
-        self.feature_steps = len(settings.feature_selection_percentage)
-        if settings.include_top_feature:
+        self.feature_steps = len(settings.feature_ranges)
+        if settings.use_top_feature:
             self.feature_steps += 1
 
         # Initialise Metrics Arrays
@@ -160,8 +154,6 @@ class DAP(ABC):
         """
         Initialise Base "Standard" DAP Metrics to be monitored and saved during the 
         data analysis plan.
-        
-        :return: 
         """
 
         metrics_shape = (self.iteration_steps, self.feature_steps)
@@ -176,8 +168,6 @@ class DAP(ABC):
             self.ACC: np.empty(metrics_shape),
             self.DOR: np.empty(metrics_shape),
             self.PREDS: np.empty(metrics_shape + (self.experiment_data.nb_samples,), dtype=np.int),
-            self.REALPREDS0: np.empty(metrics_shape + (self.experiment_data.nb_samples,), dtype=np.float),
-            self.REALPREDS1: np.empty(metrics_shape + (self.experiment_data.nb_samples,), dtype=np.float),
 
             # Confidence Interval Metrics-specific
             self.MCC_CI: np.empty((self.feature_steps, 3)),
@@ -192,8 +182,6 @@ class DAP(ABC):
         }
         # Initialize to Flag Values
         metrics[self.PREDS][:, :, :] = -10
-        metrics[self.REALPREDS0][:, :, :] = -10
-        metrics[self.REALPREDS1][:, :, :] = -10
         return metrics
 
     def _compute_step_metrics(self, validation_indices, validation_labels,
@@ -227,8 +215,6 @@ class DAP(ABC):
         # Compute Base Step Metrics
         iteration_step, feature_step = self._iteration_step_no, self._feature_step_no
         self.metrics[self.PREDS][iteration_step, feature_step, validation_indices] = predicted_labels
-        self.metrics[self.REALPREDS0][iteration_step, feature_step, validation_indices] = predicted_class_probs[:, 0]
-        self.metrics[self.REALPREDS1][iteration_step, feature_step, validation_indices] = predicted_class_probs[:, 1]
         self.metrics[self.NPV][iteration_step, feature_step] = npv(validation_labels, predicted_labels)
         self.metrics[self.PPV][iteration_step, feature_step] = ppv(validation_labels, predicted_labels)
         self.metrics[self.SENS][iteration_step, feature_step] = sensitivity(validation_labels, predicted_labels)
@@ -245,10 +231,10 @@ class DAP(ABC):
     def _compute_extra_step_metrics(self, validation_indices=None, validation_labels=None,
                                     predicted_labels=None, predicted_class_probs=None, **extra_metrics):
         """Method to be implemented in case extra metrics are returned during the fit-predict step.
-           By default, no additonal extra metrics are returned.
+           By default, no additional extra metrics are returned.
            
            Parameters are all the same of the "default" _compute_step_metrics method, with the 
-           exception that can be None to make the API even more flaxible!
+           exception that can be None to make the API even more flexible!
         """
         pass
 
@@ -280,17 +266,17 @@ class DAP(ABC):
         _ci_metric(self.SENS_CI, self.SENS)  # SENS
 
     @staticmethod
-    def _save_metric_to_file(metric_fname, metric, columns=None, index=None):
+    def _save_metric_to_file(metric_filename, metric, columns=None, index=None):
         """
         Write single metric data to a CSV file (tab separated).
         Before writing data to files, data are converted to a `pandas.DataFrame`.
         
         Parameters
         ----------
-        metric_fname: str
+        metric_filename: str
             The name of the output file where to save metrics data
             
-        metric: array-like, shape = (n_iterations, n_feature_steps) [tipically]
+        metric: array-like, shape = (n_iterations, n_feature_steps) [typically]
             The 2D data for input metric collected during the whole DAP process.
             
         columns: list
@@ -301,7 +287,7 @@ class DAP(ABC):
         """
 
         df = pd.DataFrame(metric, columns=columns, index=index)
-        df.to_csv(metric_fname, sep='\t')
+        df.to_csv(metric_filename, sep='\t')
 
     def _save_all_metrics_to_file(self, base_output_folder_path, feature_steps, feature_names, sample_names):
         """
@@ -322,7 +308,7 @@ class DAP(ABC):
             List of all sample names
         """
 
-        blacklist = [self.RANKINGS, self.PREDS, self.REALPREDS0, self.REALPREDS1]
+        blacklist = [self.RANKINGS, self.PREDS]
         for key in self.BASE_METRICS:
             if key not in blacklist:
                 metric_values = self.metrics[key]
@@ -334,11 +320,11 @@ class DAP(ABC):
                                   self.metrics[self.RANKINGS], feature_names)
 
         # Save Metrics for Predictions
-        for istep, step in enumerate(feature_steps):
+        for i_step, step in enumerate(feature_steps):
             for key in blacklist[1:]:  # exclude RANKING, already saved
                 self._save_metric_to_file(os.path.join(base_output_folder_path,
                                                        'metric_{}_fs{}.txt'.format(key, step)),
-                                          self.metrics[key][:, istep, :], sample_names)
+                                          self.metrics[key][:, i_step, :], sample_names)
 
         # Save Confidence Intervals Metrics
         # NOTE: All metrics will be saved together into a unique file.
@@ -360,7 +346,7 @@ class DAP(ABC):
         
         Total features for each step are collected according to the 
         total number of features, and feature percentages specified in settings
-        (see: settings.feature_selection_percentage).
+        (see: settings.feature_ranges).
         
         Parameters
         ----------
@@ -374,9 +360,9 @@ class DAP(ABC):
             in slicing features at each (feature) step.
         """
         k_features_indices = list()
-        if settings.include_top_feature:
+        if settings.use_top_feature:
             k_features_indices.append(1)
-        for percentage in settings.feature_selection_percentage:
+        for percentage in settings.feature_ranges:
             k = np.floor((nb_features * percentage) / 100).astype(np.int) + 1
             k_features_indices.append(k)
 
@@ -389,52 +375,38 @@ class DAP(ABC):
 
         Parameters
         ----------
-
-        training_indices: numpy.ndarray
+        training_indices: array-like
             Indices of samples in training set
 
-        validation_indices: numpy.ndarray
+        validation_indices: array-like
             Indices of samples in the validation set
         """
         Xs_tr, Xs_val = self.X[training_indices], self.X[validation_indices]
         ys_tr, ys_val = self.y[training_indices], self.y[validation_indices]
         return (Xs_tr, Xs_val), (ys_tr, ys_val)
 
-    def _feature_scaling(self, X_train):
+    def _get_feature_scaler(self):
         """
-        Train a sklearn feature scaling estimator on traning data
+        Retrieves the Scaler object corresponding to what 
+        specified in settings.
         
-        Parameters
-        ----------
-        X_train: array-like, shape = [n_samples, n_features]
-            Training data to `fit_transform` by the processing Estimator.
-
         Returns
-        -------
-        X_train_scaled: array-like, shape = [n_samples, n_features]
-            Training data with features scaled according to the selected
-            scaling method/estimator.
-            
-        scaler: sklearn.base.TransformerMixin
+        -------    
+        sklearn.base.TransformerMixin
             Scikit-learn feature scaling estimator, already trained on
             input training data, and so ready to be applied on validation data.
+            
+        Raises
+        ------
+        ValueError if a wrong/not supported feature scaling method has been
+        specified in settings.
         """
-        if self.scaling_method == settings.NORM_L2:
-            scaler = Normalizer(norm='l2', copy=False)
-            X_train_scaled = scaler.fit_transform(X_train)
-        elif self.scaling_method == settings.STD:
-            scaler = StandardScaler(copy=False)
-            X_train_scaled = scaler.fit_transform(X_train)
-        elif self.scaling_method == settings.MINMAX:
-            scaler = MinMaxScaler(feature_range=(-1, 1), copy=False)
-            X_train_scaled = scaler.fit_transform(X_train)
-        elif self.scaling_method == settings.MINMAX0:
-            scaler = MinMaxScaler(feature_range=(0, 1), copy=False)
-            X_train_scaled = scaler.fit_transform(X_train)
-        else:
-            raise Exception("The only supported scaling are norm_l2, std, minmax, minmax0")
-
-        return X_train_scaled, scaler
+        # This mimics what is done by Keras when accepting
+        # string parameters (e.g. `optimizer='los'`).
+        try:
+            self.feature_scaler = globals().get(self.feature_scaler)
+        except:
+            raise ValueError('No Feature Scaling Method found!')
 
     def _apply_scaling(self, X_train, X_validation):
         """
@@ -442,29 +414,28 @@ class DAP(ABC):
         
         Parameters
         ----------
-        X_train: array-like, shape = [n_samples, n_features]
+        X_train: array-like, shape = (n_samples, n_features)
             Training data to `fit_transform` by the selected feature scaling method
             
-        X_validation: array-like, shape = [n_samples, n_features]
+        X_validation: array-like, shape = (n_samples, n_features)
             Validation data to `transform` by the selected feature scaling method
 
         Returns
         -------
-        X_train_scaled: array-like, shape = [n_samples, n_features]
+        X_train_scaled: array-like, shape = (n_samples, n_features)
             Training data with features scaled according to the selected
             scaling method/estimator.
             
-        X_val_scaled: array-like, shape = [n_samples, n_features]
+        X_val_scaled: array-like, shape = (n_samples, n_features)
             Validation data with features scaled according to the selected
             scaling method/estimator.
         
-        See Also
-        --------
-        DAP._feature_scaling(X_train)
-
         """
-
-        X_train_scaled, scaler = self._feature_scaling(X_train)
+        if isinstance(self.feature_scaler, str):
+            scaler = self._get_feature_scaler()
+        else:
+            scaler = self.feature_scaler
+        X_train_scaled = scaler.fit_transform(X_train)
         X_val_scaled = scaler.transform(X_validation)
         return X_train_scaled, X_val_scaled
 
@@ -475,10 +446,10 @@ class DAP(ABC):
          
         Parameters
         ----------
-        X_train: array-like, shape = [n_samples, n_features]
+        X_train: array-like, shape = (n_samples, n_features)
             Training data matrix
             
-        y_train: array-like, shape = [n_samples]
+        y_train: array-like, shape = (n_samples)
             Training labels
             
         seed: int (default: np.random.rand(1234))
@@ -486,29 +457,18 @@ class DAP(ABC):
 
         Returns
         -------
-        ranking: array-like, shape = [n_features, ]
+        ranking: array-like, shape = (n_features, )
             features ranked by the selected ranking method
         """
+        if isinstance(self.feature_scaler, str):
+            # This mimics what is done by Keras when accepting
+            # string parameters (e.g. `optimizer='los'`).
+            try:
+                self.feature_ranker = globals().get(self.feature_ranker)
+            except:
+                raise ValueError('No Feature Ranking Method found!')
 
-        if self.ranking_method == settings.RANDOM:
-            ranking = np.arange(X_train.shape[1])
-            np.random.seed(seed)
-            np.random.shuffle(ranking)
-
-        elif self.ranking_method == settings.RELIEFF:
-            relief = ReliefF(settings.relief_k, seed=seed)
-            relief.learn(X_train, y_train)
-            w = relief.w()
-            ranking = np.argsort(w)[::-1]
-
-        elif self.ranking_method == settings.KBEST:
-            selector = SelectKBest(k=settings.kbest)
-            selector.fit(X_train, y_train)
-            ranking = np.argsort(-np.log10(selector.pvalues_))[::-1]
-
-        else:
-            raise Exception("The only supported Ranking are random, ReliefF, KBest")
-
+        ranking = self.feature_ranker(X_train, y_train, seed=seed)
         return ranking
 
     def _select_ranked_features(self, X_train, X_validation, ranked_feature_indices):
@@ -574,15 +534,15 @@ class DAP(ABC):
             List of extra metrics to log during execution.
         """
 
-        X_train = self._prepare_data(X_train, is_training_data=True)
-        y_train = self._prepare_targets(y_train)
+        X_train = self._prepare_data(X_train, training_data=True)
+        y_train = self._prepare_targets(y_train, training_labels=True)
         model, extra_metrics = self._fit(model, X_train, y_train)
 
-        X_validation = self._prepare_data(X_validation)
+        X_validation = self._prepare_data(X_validation, training_data=False)
         predicted_classes, predicted_class_probs = self._predict(model, X_validation)
         return predicted_classes, predicted_class_probs, extra_metrics
 
-    def _prepare_data(self, X, is_training_data=True):
+    def _prepare_data(self, X, training_data=True):
         """
         Preparation of data before training/inference.
         Current implementation (default behaviour) does not apply
@@ -593,7 +553,7 @@ class DAP(ABC):
         X: array-like, shape = (n_samples, n_features)
             Input data to prepare
             
-        is_training_data: bool (default: True)
+        training_data: bool (default: True)
             Flag indicating whether input data are training data or not.
             This flag is included as it may be required to prepare data
             differently depending they're training or validation data.
@@ -605,7 +565,7 @@ class DAP(ABC):
         """
         return X
 
-    def _prepare_targets(self, y, is_training_data=True):
+    def _prepare_targets(self, y, training_labels=True):
         """
         Preparation of targets before training/inference.
         Current implementation only checks whether categorical one-hot encoding 
@@ -616,7 +576,7 @@ class DAP(ABC):
         y: array-like, shape = (n_samples, )
             array of targets for each sample.
             
-        is_training_data: bool (default: True)
+        training_labels: bool (default: True)
             Flag indicating whether input targets refers to training data or not.
             This flag is included as it may be required to prepare labels
             differently depending they refers to training or validation data.
@@ -632,7 +592,7 @@ class DAP(ABC):
             y = np_utils.to_categorical(y, self.experiment_data.nb_classes)
         return y
 
-    def _fit(self, model, X_train, y_train, **kwargs):
+    def _fit(self, model, X_train, y_train, X_validation=None, y_validation=None):
         """
         Default implementation of the training (`fit`) step of input model 
         considering scikit-learn Estimator API.
@@ -648,11 +608,15 @@ class DAP(ABC):
         y_train: array-like, shape = (n_samples, )
             Training labels
             
-        Other Parameters
-        ----------------
-        
-        kwargs: dict
-            Additional arguments to pass to the fit
+        X_validation: array-like, shape = (n_samples, n_features) - default: None
+            Validation data to be used in combination with Training data.
+            This parameter has been included to maintain compatibility with
+            keras.models.Model.fit API allowing to pass validation data in `fit`.
+            
+        y_validation: array-like, shape = (n_samples, ) - default: None
+            Validation labels to be used in combination with validation data.
+            This parameter has been included to maintain compatibility with
+            keras.models.Model.fit API allowing to pass validation data in `fit`.
 
         Returns
         -------
@@ -722,9 +686,6 @@ class DAP(ABC):
         dap_model: sklearn.base.BaseEstimator
             The estimator object fit on the whole training set (i.e. (self.X, self.y) )
             
-        scaler: sklearn.base.TransformerMixin
-            Scaler object resulting from feature scaling process (if applied). None, otherwise.
-            
         extra_metrics: dict
             Dictionary containing information about extra metrics to be monitored during the 
             process and so to be saved, afterwards.
@@ -746,9 +707,8 @@ class DAP(ABC):
 
         # 2.1 Apply Feature Scaling (if needed)
         if self.apply_feature_scaling:
-            X_train, scaler = self._feature_scaling(X_train)
-        else:
-            scaler = None
+            X_train = self.feature_scaler.fit_transform(X_train)
+            # Note: self.feature_scaler stores the reference to trained scaler
 
         # 3. Apply Feature Ranking
         ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
@@ -762,7 +722,7 @@ class DAP(ABC):
 
         model, extra_metrics = self._fit(model, Xs_train_fs, y_train)
 
-        return model, scaler, extra_metrics
+        return model, extra_metrics
 
     # ===========================================================
 
@@ -783,8 +743,6 @@ class DAP(ABC):
             different DAP subclasses (e.g. A `keras.models.Model` is returned by the 
             `DeepLearningDap` subclass).
             
-        scaler: sklearn.base.BaseEstimator
-            Scaler object resulting from feature scaling process (if used). None, otherwise.
         """
         base_output_folder = self._get_output_folder()
 
@@ -820,12 +778,12 @@ class DAP(ABC):
                 # 2.1 Apply Feature Scaling (if needed)
                 if self.apply_feature_scaling:
                     if verbose:
-                        print('-- centering and normalization using: {}'.format(self.scaling_method))
+                        print('-- centering and normalization using: {}'.format(str(self.feature_scaler)))
                     X_train, X_validation = self._apply_scaling(X_train, X_validation)
 
                 # 3. Apply Feature Ranking
                 if verbose:
-                    print('-- ranking the features using: {}'.format(self.ranking_method))
+                    print('-- ranking the features using: {}'.format(str(self.feature_ranker)))
                 ranking = self._apply_feature_ranking(X_train, y_train, seed=runstep)
                 self.metrics[self.RANKINGS][self._iteration_step_no] = ranking  # store ranking
 
@@ -857,10 +815,12 @@ class DAP(ABC):
         self._save_all_metrics_to_file(base_output_folder, k_features_indices,
                                        self.experiment_data.feature_names, self.experiment_data.sample_names)
 
-        dap_model, scaler, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
+        dap_model, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
         if extra_metrics:
             self._compute_extra_step_metrics(extra_metrics)
-        return dap_model, scaler
+
+        # Finally return the trained model
+        return dap_model
 
 
 class DeepLearningDAP(DAP):
@@ -876,10 +836,31 @@ class DeepLearningDAP(DAP):
 
     def __init__(self, experiment):
         super(DeepLearningDAP, self).__init__(experiment=experiment)
-        self.selected_optimizer = settings.optimizer
+
+        # Set additional attributes from Deep Learning Specific Settings set.
         self.learning_epochs = settings.epochs
         self.batch_size = settings.batch_size
         self.fit_verbose = settings.fit_verbose
+        self.fit_callbacks = settings.callbacks
+
+        # extra fit parameters
+        self.extra_fit_params = {
+            'validation_split': settings.validation_split,
+            'shuffle': settings.shuffle,
+        }
+        if settings.initial_epoch:
+            self.extra_fit_params['initial_epoch'] = settings.initial_epoch
+        if settings.sample_weight:
+            self.extra_fit_params['sample_weight'] = settings.sample_weight
+        if settings.class_weight:
+            self.extra_fit_params['class_weight'] = settings.class_weight
+
+        # Compilation Settings
+        self.optimizer = settings.optimizer
+        self.loss_function = settings.loss
+        self.learning_metrics = settings.metrics
+        self.loss_weights = settings.loss_weights
+        self.extra_compile_params = settings.extra_compilation_parameters
 
         # Model Cache - one model reference per feature step
         self._model_cache = {}
@@ -909,10 +890,33 @@ class DeepLearningDAP(DAP):
             self.ml_model_ = model
         return self.ml_model_
 
-    @abstractmethod
     def _create_ml_model(self):
         """Instantiate a new Keras Deep Network to be used in the fit-predict step.
+        
+        Returns
+        -------
+        model: keras.models.Model
+            The new deep learning Keras model.
         """
+
+        model = self._build_network()
+
+        # Set Compilation Params
+        extra_compile_params = {}
+        if self.loss_weights:
+            extra_compile_params['loss_weights'] = self.loss_weights
+        if self.extra_compile_params:
+            extra_compile_params.update(**self.extra_compile_params)
+
+        model.compile(loss=self.loss_function, optimizer=self.optimizer,
+                      metrics=self.learning_metrics, **extra_compile_params)
+        return model
+
+    @abstractmethod
+    def _build_network(self):
+        """Abstract method that must be implemented by subclasses to actually
+        build the Neural Network graph of layers. This method must return a new
+        keras.models.Model object."""
 
     # ==== Overriding of Utility Methods ====
     #
@@ -991,11 +995,11 @@ class DeepLearningDAP(DAP):
 
         # Save Deep Learning Specific Metrics
         epochs_names = ['epoch {}'.format(e) for e in range(self.learning_epochs)]
-        for istep, step in enumerate(feature_steps):
+        for i_step, step in enumerate(feature_steps):
             for metric_key in self.NETWORK_METRICS:
                 self._save_metric_to_file(os.path.join(base_output_folder_path,
                                                        'metric_{}_fs{}.txt'.format(step, metric_key)),
-                                          self.metrics[metric_key][:, istep, :], epochs_names)
+                                          self.metrics[metric_key][:, i_step, :], epochs_names)
 
     # ==== Overriding of DAP Ops Methods ====
     #
@@ -1045,17 +1049,17 @@ class DeepLearningDAP(DAP):
         """
 
         # Prepare Data
-        X_train = self._prepare_data(X_train)
-        y_train = self._prepare_targets(y_train)
-        X_validation = self._prepare_data(X_validation)
-        y_validation = self._prepare_targets(y_validation)
+        X_train = self._prepare_data(X_train, training_data=True)
+        y_train = self._prepare_targets(y_train, training_labels=True)
+        X_validation = self._prepare_data(X_validation, training_data=False)
+        y_validation = self._prepare_targets(y_validation, training_labels=False)
 
         model, extra_metrics = self._fit(model, X_train, y_train,
                                          X_validation=X_validation, y_validation=y_validation)
         predicted_classes, predicted_class_probs = self._predict(model, X_validation)
         return predicted_classes, predicted_class_probs, extra_metrics
 
-    def _fit(self, model, X_train, y_train, **kwargs):
+    def _fit(self, model, X_train, y_train, X_validation=None, y_validation=None):
         """
         Default implementation of the training (`fit`) step for an input Keras 
         Deep Learning Network model.
@@ -1071,17 +1075,15 @@ class DeepLearningDAP(DAP):
         y_train: array-like, shape = (n_samples, )
             Training labels
         
-        Other Parameters
-        ----------------
-        
-        kwargs: dict
-            Additional arguments to pass to the fit. 
-            By default, this dictionary will contain 
-            two keys, namely 'X_validation' and 'y_validation'
-            corresponding to validation data and targets to 
-            provide to the model fit function.
-            Other kwargs are expected to be formatted
-            according to the `keras.models.Model.fit` API.
+        X_validation: array-like, shape = (n_samples, n_features) - default: None
+            Validation data to be used in combination with Training data.
+            This parameter has been included to maintain compatibility with
+            keras.models.Model.fit API allowing to pass validation data in `fit`.
+            
+        y_validation: array-like, shape = (n_samples, ) - default: None
+            Validation labels to be used in combination with validation data.
+            This parameter has been included to maintain compatibility with
+            keras.models.Model.fit API allowing to pass validation data in `fit`.
 
         Returns
         -------
@@ -1092,24 +1094,20 @@ class DeepLearningDAP(DAP):
             List of extra metrics to be logged during execution. Default: `model_history`
         """
 
-        X_validation = kwargs.pop('X_validation', None)
-        y_validation = kwargs.pop('y_validation', None)
-
+        # Setup extra fit parameters from settings
         if X_validation and y_validation:
-            extra_fit_params = {'validation_data': (X_validation, y_validation)}
-        else:
-            extra_fit_params = {}
-        extra_fit_params.update(**kwargs)
+            self.extra_fit_params['validation_data'] = (X_validation, y_validation)
 
-        model_fname = '{}_{}_model.hdf5'.format(self._iteration_step_no, self._nb_features)
+        model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_no, self._nb_features)
         base_output_folder = self._get_output_folder()
+        model_filename = os.path.join(base_output_folder, model_filename)
+        callbacks = [ModelCheckpoint(filepath=model_filename, save_best_only=True, save_weights_only=True), ]
+        if self.fit_callbacks:
+            callbacks.extend(self.fit_callbacks)
 
-        model_fname = os.path.join(base_output_folder, model_fname)
         model_history = model.fit(X_train, y_train, epochs=self.learning_epochs,
                                   batch_size=self.batch_size, verbose=self.fit_verbose,
-                                  callbacks=[ModelCheckpoint(filepath=model_fname, save_best_only=True,
-                                                             save_weights_only=True), ],
-                                  **extra_fit_params)
+                                  callbacks=callbacks, **self.extra_fit_params)
         extra_metrics = {
             self.HISTORY: model_history
         }
@@ -1117,8 +1115,8 @@ class DeepLearningDAP(DAP):
 
     def _predict(self, model, X_validation, y_validation=None, **kwargs):
         """
-        Default implementation of the inference (`predict`) step of input model 
-        considering scikit-learn Estimator API.
+        Default implementation of the inference (`predict`) step of input 
+        Keras model.
 
         Parameters
         ----------
@@ -1150,47 +1148,3 @@ class DeepLearningDAP(DAP):
         predicted_class_probs = model.predict(X_validation)
         predicted_classes = predicted_class_probs.argmax(axis=-1)
         return predicted_classes, predicted_class_probs
-
-    # ===== Additional Deep Learning (Keras) Specific DAP methods
-
-    def _get_optimizer(self):
-        """
-        Configure and Returns a keras.optimizers.Optimizer object
-        that has been selected in settings directives.
-        
-        Returns
-        -------
-        keras.optimizers.Optimizer
-            Otpimizer object, configured with parameters specified in settings.
-            
-        Raises
-        ------
-        Raises an Exception if a wrong optimizer name has been found in settings.
-       """
-
-        if self.selected_optimizer == settings.ADAM:
-            epsilon = settings.adam_epsilon
-            lr = settings.adam_lr
-            beta_1 = settings.beta_1
-            beta_2 = settings.beta_2
-            optimizer = Adam(lr=lr, beta_1=beta_1, beta_2=beta_2, epsilon=epsilon)
-
-        elif self.selected_optimizer == settings.RMSPROP:
-            epsilon = settings.rmsprop_epsilon
-            lr = settings.rmsprop_lr
-            rho = settings.rho
-            optimizer = RMSprop(lr=lr, rho=rho, epsilon=epsilon)
-
-        elif self.selected_optimizer == settings.SGD:
-            nesterov = settings.nesterov
-            lr = settings.sgd_lr
-            momentum = settings.momentum
-            decay = settings.decay
-            optimizer = SGD(lr=lr, momentum=momentum, decay=decay, nesterov=nesterov)
-
-        else:
-            raise Exception("The only supported selected_optimizer are {}, {}, {}".format(settings.RMSPROP,
-                                                                                          settings.SGD, settings.ADAM))
-        return optimizer
-
-        # TODO: Add _get_metrics
