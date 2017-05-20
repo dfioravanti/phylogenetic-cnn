@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 
 class DAP(ABC):
     """Data Analysis Plan ABC"""
-    
+
     # Metrics Keys
     ACC = 'ACC'
     DOR = 'DOR'
@@ -219,7 +219,7 @@ class DAP(ABC):
         Other Parameters
         ----------------
             
-        extra_metrics: dict
+        extra_metrics:
             List of extra metrics to log during execution returned by the `_fit_predict` method
             This list will be processed separately from standard "base" metrics.
         """
@@ -240,7 +240,7 @@ class DAP(ABC):
 
         if extra_metrics:
             self._compute_extra_step_metrics(validation_indices, validation_labels,
-                                             predicted_labels, predicted_class_probs, extra_metrics)
+                                             predicted_labels, predicted_class_probs, **extra_metrics)
 
     def _compute_extra_step_metrics(self, validation_indices=None, validation_labels=None,
                                     predicted_labels=None, predicted_class_probs=None, **extra_metrics):
@@ -279,7 +279,8 @@ class DAP(ABC):
         _ci_metric(self.SPEC_CI, self.SPEC)  # SPEC
         _ci_metric(self.SENS_CI, self.SENS)  # SENS
 
-    def _save_metric_to_file(self, metric_fname, metric, columns=None, index=None):
+    @staticmethod
+    def _save_metric_to_file(metric_fname, metric, columns=None, index=None):
         """
         Write single metric data to a CSV file (tab separated).
         Before writing data to files, data are converted to a `pandas.DataFrame`.
@@ -351,7 +352,8 @@ class DAP(ABC):
                                   ci_metric_values, columns=['Mean', 'Lower', 'Upper'],
                                   index=metric_names)
 
-    def _generate_feature_steps(self, nb_features):
+    @staticmethod
+    def _generate_feature_steps(nb_features):
         """
         Generate the feature_steps, i.e. the total number
         of features to select at each step in the Cross validation.
@@ -362,7 +364,7 @@ class DAP(ABC):
         
         Parameters
         ----------
-        nb_feature: int
+        nb_features: int
             The total number of feature
             
         Returns
@@ -572,7 +574,7 @@ class DAP(ABC):
             List of extra metrics to log during execution.
         """
 
-        X_train = self._prepare_data(X_train)
+        X_train = self._prepare_data(X_train, is_training_data=True)
         y_train = self._prepare_targets(y_train)
         model, extra_metrics = self._fit(model, X_train, y_train)
 
@@ -580,7 +582,7 @@ class DAP(ABC):
         predicted_classes, predicted_class_probs = self._predict(model, X_validation)
         return predicted_classes, predicted_class_probs, extra_metrics
 
-    def _prepare_data(self, X):
+    def _prepare_data(self, X, is_training_data=True):
         """
         Preparation of data before training/inference.
         Current implementation (default behaviour) does not apply
@@ -588,30 +590,40 @@ class DAP(ABC):
         
         Parameters
         ----------
-        X: numpy.ndarray (samples x features)
+        X: array-like, shape = (n_samples, n_features)
             Input data to prepare
+            
+        is_training_data: bool (default: True)
+            Flag indicating whether input data are training data or not.
+            This flag is included as it may be required to prepare data
+            differently depending they're training or validation data.
 
         Returns
         -------
-        numpy.ndarray (samples x features)
+        array-like, shape = (n_samples, n_features)
             Input data unchanged (Identity)
         """
         return X
 
-    def _prepare_targets(self, y):
+    def _prepare_targets(self, y, is_training_data=True):
         """
         Preparation of targets before training/inference.
         Current implementation only checks whether categorical one-hot encoding 
-        is required on labels. Otrherwise, input labels remain unchanged. 
+        is required on labels. Otherwise, input labels remain unchanged. 
         
         Parameters
         ----------
-        y: numpy.ndarray  (samples, )
+        y: array-like, shape = (n_samples, )
             array of targets for each sample.
+            
+        is_training_data: bool (default: True)
+            Flag indicating whether input targets refers to training data or not.
+            This flag is included as it may be required to prepare labels
+            differently depending they refers to training or validation data.
 
         Returns
         -------
-        y : numpy.ndarray
+        y : array-like, shape = (n_samples, )
             Array of targets whose dimensions will be unchanged, if no encoding has been applied),
             or (samples x nb_classes) otherwise.
 
@@ -791,7 +803,7 @@ class DAP(ABC):
 
             if verbose:
                 print('=' * 80)
-                print('{} over {} experiments'.format(runstep+1, self.cv_n))
+                print('{} over {} experiments'.format(runstep + 1, self.cv_n))
 
             for fold, (training_indices, validation_indices) in enumerate(kfold_indices):
 
@@ -799,7 +811,7 @@ class DAP(ABC):
 
                 if verbose:
                     print('=' * 80)
-                    print('{} over {} folds'.format(fold+1, self.cv_k))
+                    print('{} over {} folds'.format(fold + 1, self.cv_k))
 
                 # 2. Split data in Training and Validation sets
                 (X_train, X_validation), (y_train, y_validation) = self._train_validation_split(training_indices,
@@ -837,7 +849,7 @@ class DAP(ABC):
                                                                                                 X_train_fs, y_train,
                                                                                                 X_val_fs, y_validation)
                     self._compute_step_metrics(validation_indices, y_validation,
-                                               predicted_classes, predicted_class_probs, extra_metrics)
+                                               predicted_classes, predicted_class_probs, **extra_metrics)
 
         # Compute Confidence Intervals for all target metrics
         self._compute_metrics_confidence_intervals(k_features_indices)
@@ -845,7 +857,7 @@ class DAP(ABC):
         self._save_all_metrics_to_file(base_output_folder, k_features_indices,
                                        self.experiment_data.feature_names, self.experiment_data.sample_names)
 
-        dap_model, scaler, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n+1)
+        dap_model, scaler, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
         if extra_metrics:
             self._compute_extra_step_metrics(extra_metrics)
         return dap_model, scaler
@@ -926,16 +938,16 @@ class DeepLearningDAP(DAP):
         
         Parameters
         ----------
-        validation_indices: array-like, shape = [n_samples]
+        validation_indices: array-like, shape = (n_samples, )
             Indices of validation samples
             
-        validation_labels: array-like, shape = [n_samples]
+        validation_labels: array-like, shape = (n_samples, )
             Array of labels for samples in the validation set
             
-        predicted_labels: array-like, shape = [n_samples]
+        predicted_labels: array-like, shape = (n_samples, )
             Array of predicted labels for each sample in the validation set
             
-        predicted_class_probs: array-like, shape = [n_samples, n_classes]
+        predicted_class_probs: array-like, shape = (n_samples, n_classes)
             matrix containing the probability for each class and for each sample in the
             validation set
             
@@ -1095,8 +1107,8 @@ class DeepLearningDAP(DAP):
         model_fname = os.path.join(base_output_folder, model_fname)
         model_history = model.fit(X_train, y_train, epochs=self.learning_epochs,
                                   batch_size=self.batch_size, verbose=self.fit_verbose,
-                                  callbacks = [ModelCheckpoint(filepath=model_fname, save_best_only=True,
-                                                               save_weights_only=True),],
+                                  callbacks=[ModelCheckpoint(filepath=model_fname, save_best_only=True,
+                                                             save_weights_only=True), ],
                                   **extra_fit_params)
         extra_metrics = {
             self.HISTORY: model_history
@@ -1143,10 +1155,17 @@ class DeepLearningDAP(DAP):
 
     def _get_optimizer(self):
         """
-        Configure a selected_optimizer. It raises an exception if a wrong selected_optimizer name is required.
-
-        :param selected_optimizer: string containing the name of the selected_optimizer that we want to configure 
-        :return: The selected_optimizer and a dictionary containing the name and the parameter of the selected_optimizer 
+        Configure and Returns a keras.optimizers.Optimizer object
+        that has been selected in settings directives.
+        
+        Returns
+        -------
+        keras.optimizers.Optimizer
+            Otpimizer object, configured with parameters specified in settings.
+            
+        Raises
+        ------
+        Raises an Exception if a wrong optimizer name has been found in settings.
        """
 
         if self.selected_optimizer == settings.ADAM:
@@ -1171,7 +1190,7 @@ class DeepLearningDAP(DAP):
 
         else:
             raise Exception("The only supported selected_optimizer are {}, {}, {}".format(settings.RMSPROP,
-                                                                                 settings.SGD, settings.ADAM))
+                                                                                          settings.SGD, settings.ADAM))
         return optimizer
 
         # TODO: Add _get_metrics
