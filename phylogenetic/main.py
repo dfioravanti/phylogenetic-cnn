@@ -9,8 +9,8 @@ from utils import get_data, to_list
 from data_analysis_plan import DeepLearningDAP
 
 from keras.engine import Input, Model
-from keras.layers import Lambda, MaxPool2D, Flatten, Dropout, Dense
-from phcnn.layers import phcnn_conv_block
+from keras.layers import Lambda, MaxPooling1D, Flatten, Dropout, Dense
+from phcnn.layers import phylo_convutional_block
 
 
 class PhyloDAP(DeepLearningDAP):
@@ -46,7 +46,7 @@ class PhyloDAP(DeepLearningDAP):
         -------
 
         """
-        self._C_fs = self.C[:,:,ranked_feature_indices]
+        self._C_fs = self.C[..., ranked_feature_indices]
         return super(PhyloDAP, self)._select_ranked_features(X_train, X_validation,
                                                              ranked_feature_indices)
 
@@ -59,8 +59,8 @@ class PhyloDAP(DeepLearningDAP):
         nb_coordinates = self.experiment_data.nb_coordinates
         nb_classes = self.experiment_data.nb_classes
 
-        x = Input(shape=(1, nb_features, 1), name="data", dtype='float64')
-        coordinates = Input(shape=(nb_coordinates, 1, nb_features, 1),
+        x = Input(shape=(nb_features, 1), name="data", dtype='float64')
+        coordinates = Input(shape=(nb_coordinates, nb_features, 1),
                             name="coordinates", dtype='float64')
 
         # TODO: Fix this one. Probably is better just throw an exception
@@ -71,10 +71,10 @@ class PhyloDAP(DeepLearningDAP):
         conv_crd = Lambda(lambda c: c[0])(coordinates)
 
         for nb_filters, nb_neighbors in zip(filters, nb_neighbours):
-            conv, conv_crd = phcnn_conv_block(conv, conv_crd, nb_neighbors,
-                                              nb_features, nb_filters)
+            conv, conv_crd = phylo_convutional_block(conv, conv_crd, nb_neighbors,
+                                                     nb_features, nb_filters)
 
-        max = MaxPool2D(pool_size=(1, 2), padding="valid")(conv)
+        max = MaxPooling1D(pool_size=2, padding="valid")(conv)
         flatt = Flatten()(max)
         drop = Dropout(0, 1)(Dense(units=64)(flatt))
         output = Dense(units=nb_classes, kernel_initializer="he_normal",
