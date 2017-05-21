@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from keras.layers import Layer
-from keras.layers.convolutional import Conv1D
+from keras.layers import Layer, InputSpec
+from keras.layers.convolutional import Conv1D, Conv2D
 
 from keras import backend as K
 import tensorflow as tf
@@ -334,3 +334,89 @@ def phylo_convutional_block(Xs, Crd, nb_neighbors, nb_features, filters):
     Crd_new = phcnn(phngb(Crd))
 
     return Xs_new, Crd_new
+
+
+class PhyloConv2(Conv1D):
+
+    # TODO: Check if is really a conv1D what we want to do....
+
+    def __init__(self,
+                 coordinates,
+                 nb_neighbors,
+                 filters,
+                 activation='relu',
+                 kernel_initializer='glorot_uniform',
+                 bias_initializer='zeros',
+                 kernel_regularizer=None,
+                 bias_regularizer=None,
+                 activity_regularizer=None,
+                 kernel_constraint=None,
+                 bias_constraint=None,
+                 **kwargs):
+
+        self.nb_features = coordinates.shape[1].value
+        self.nb_neighbors = nb_neighbors
+        self.dist = _euclidean_distances(coordinates)
+
+        super(PhyloConv2, self).__init__(
+            filters=filters,
+            kernel_size=nb_neighbors,
+            strides=nb_neighbors,
+            activation=activation,
+            kernel_initializer=kernel_initializer,
+            bias_initializer=bias_initializer,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
+            kernel_constraint=kernel_constraint,
+            bias_constraint=bias_constraint,
+            **kwargs
+        )
+
+        # TODO: Check if there is a better solution
+        self.input_spec = [InputSpec(shape=(None, coordinates.shape[1].value, coordinates.shape[2].value)),
+                           InputSpec(shape=coordinates.shape)]
+
+    def build(self, input_shape):
+
+        super(PhyloConv2, self).build(input_shape[0])
+        self.input_spec = [InputSpec(ndim=3), InputSpec(ndim=3)]
+
+    def call(self, inputs, **kwargs):
+
+        X = inputs[0]
+        Coord = inputs[1]
+
+        # Phylo neighbors step
+
+        neighbor_indexes = _top_k(-self.dist, k=self.nb_neighbors)
+        target_neighbors = neighbor_indexes[0: self.nb_features, 0:self.nb_neighbors, :]
+        X_phylongb = _gather_target_neighbors(X, target_neighbors)
+        Coord_phylongb = _gather_target_neighbors(Coord, target_neighbors)
+
+        # Convolution step
+
+        X_conv = super(PhyloConv2, self).call(X_phylongb)
+        C_conv = super(PhyloConv2, self).call(Coord_phylongb)
+
+        output = [X_conv, C_conv]
+
+        return output
+
+    def compute_output_shape(self, input_shape):
+
+        X_shape = (input_shape[0][0],
+                   input_shape[0][1] * self.nb_neighbors,
+                   input_shape[0][2])
+        C_shape = (input_shape[1][0],
+                   input_shape[1][1] * self.nb_neighbors,
+                   input_shape[1][2])
+
+        x = super(PhyloConv2, self).compute_output_shape(X_shape)
+        y = super(PhyloConv2, self).compute_output_shape(C_shape)
+
+        return [x,
+                y]
+
+    def compute_mask(self, inputs, mask=None):
+        return [None, None]
