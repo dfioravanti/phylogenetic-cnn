@@ -10,13 +10,16 @@ from sklearn.feature_selection import SelectKBest
 import numpy as np
 
 
-def random_ranking(X_train, seed=None):
+def random_ranking(X_train, y_train, seed=None):
     """Apply Random Feature Ranking
     
     Parameters
     ----------
     X_train: array-like, shape = (n_samples, n_features)
         Training data matrix
+        
+    y_train: array-like, shape = (n_samples)
+        Training labels
         
     seed: int (default: None)
         Integer seed to use in random number generators.
@@ -67,7 +70,7 @@ def relief_ranking(X_train, y_train, seed=None):
 relief = RELIEFF = Relieff = relief_ranking
 
 
-def kbest_ranking(X_train, y_train):
+def kbest_ranking(X_train, y_train, seed=None):
     """Apply SelectKBest based Ranking.
     
     Parameters
@@ -77,6 +80,9 @@ def kbest_ranking(X_train, y_train):
         
     y_train: array-like, shape = (n_samples)
         Training labels
+        
+    seed: int (default: None)
+        Integer seed to use in random number generators.
         
     Returns
     -------
