@@ -99,7 +99,7 @@ class PhyloDAP(DeepLearningDAP):
         super(PhyloDAP, self)._set_training_data()
         self.C = self.experiment_data.coordinates
 
-    def _select_ranked_features(self, X_train, X_validation, ranked_feature_indices):
+    def _select_ranked_features(self, ranked_feature_indices, X_train, X_validation=None):
         """
         Apply ranking filter also on Coordinates, 
         in addition to default filtering on training and validation data.
@@ -126,10 +126,10 @@ class PhyloDAP(DeepLearningDAP):
 
         # Store new attributes referring to set of coordinates in feature steps.
         # i.e. `self._C_fs`
-        self._C_fs_train = self.C[...,ranked_feature_indices]
-        self._C_fs_val = self.C[...,ranked_feature_indices]
-        return super(PhyloDAP, self)._select_ranked_features(X_train, X_validation,
-                                                             ranked_feature_indices)
+        self._C_fs_train = self.C[..., ranked_feature_indices]
+        if X_validation is not None:
+            self._C_fs_val = self.C[..., ranked_feature_indices]
+        return super(PhyloDAP, self)._select_ranked_features(ranked_feature_indices, X_train, X_validation)
 
     @staticmethod
     def _adjust_dimensions(X, Coord):
@@ -176,7 +176,7 @@ class PhyloDAP(DeepLearningDAP):
         if len(self.nb_filters) != len(self.phylo_neighbours):
             raise Exception("nb_convolutional_filters and nb_phylo_neighbours must "
                             "have the same length. Check the config file")
-        super(PhyloDAP, self).run(verbose)
+        return super(PhyloDAP, self).run(verbose)
 
 
 def main():
@@ -192,9 +192,11 @@ def main():
                       test_datafile, test_label_datafile)
 
     dap = PhyloDAP(inputs, settings.DISEASE)
-    trained_model = dap.run()
+    trained_model = dap.run(verbose=True)
 
     # ADD test evaluation
+
+    dap.predict_on_test(trained_model, inputs.test_data, inputs.test_targets)
 
 
 if __name__ == '__main__':

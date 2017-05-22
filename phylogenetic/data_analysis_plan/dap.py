@@ -50,6 +50,8 @@ class DAP(ABC):
 
     CI_METRICS = [MCC_CI, SPEC_CI, SENS_CI, DOR_CI, ACC_CI, AUC_CI, PPV_CI, NPV_CI]
 
+    TEST = 'TEST'
+
     def __init__(self, experiment):
         """
         
@@ -202,6 +204,9 @@ class DAP(ABC):
             self.SPEC_CI: np.empty((self.feature_steps, 3)),
             self.DOR_CI: np.empty((self.feature_steps, 3)),
 
+            # Test dictionary
+
+            self.TEST: dict()
         }
         # Initialize to Flag Values
         metrics[self.PREDS][:, :, :] = -10
@@ -257,6 +262,57 @@ class DAP(ABC):
            By default, no additional extra metrics are returned.
            
            Parameters are all the same of the "default" _compute_step_metrics method, with the 
+           exception that can be None to make the API even more flexible!
+        """
+        pass
+
+    def _compute_test_metrics(self, test_labels, predicted_labels,
+                              predicted_class_probs, **extra_metrics):
+
+        """
+        Compute the "classic" DAP Step metrics for test data
+
+        Parameters
+        ----------
+
+        test_labels: array-like, shape = [n_samples]
+            Array of labels for samples in the validation set
+
+        predicted_labels: array-like, shape = [n_samples]
+            Array of predicted labels for each sample in the validation set
+
+        predicted_class_probs: array-like, shape = [n_samples, n_classes]
+            matrix containing the probability for each class and for each sample in the
+            validation set
+
+        Other Parameters
+        ----------------
+
+        extra_metrics:
+            List of extra metrics to log during execution returned by the `predict` method
+            This list will be processed separately from standard "base" metrics.
+        """
+
+        self.metrics[self.TEST][self.PREDS] = predicted_labels
+        self.metrics[self.TEST][self.NPV] = npv(test_labels, predicted_labels)
+        self.metrics[self.TEST][self.PPV] = ppv(test_labels, predicted_labels)
+        self.metrics[self.TEST][self.SENS] = sensitivity(test_labels, predicted_labels)
+        self.metrics[self.TEST][self.SPEC] = specificity(test_labels, predicted_labels)
+        self.metrics[self.TEST][self.MCC] = KCCC_discrete(test_labels, predicted_labels)
+        self.metrics[self.TEST][self.AUC] = roc_auc_score(test_labels, predicted_labels)
+        self.metrics[self.TEST][self.DOR] = dor(test_labels, predicted_labels)
+        self.metrics[self.TEST][self.ACC] = accuracy(test_labels, predicted_labels)
+
+        if extra_metrics:
+            self._compute_extra_test_metrics(test_labels, predicted_labels,
+                                             predicted_class_probs, **extra_metrics)
+
+    def _compute_extra_test_metrics(self, test_labels=None, predicted_labels=None,
+                                    predicted_class_probs=None, **extra_metrics):
+        """Method to be implemented in case extra metrics are returned during the predict step.
+           By default, no additional extra metrics are returned.
+
+           Parameters are all the same of the "default" _compute_test_metrics method, with the 
            exception that can be None to make the API even more flexible!
         """
         pass
@@ -354,12 +410,36 @@ class DAP(ABC):
         ci_metric_values = list()
         metric_names = list()  # collect names to become indices of resulting pd.DataFrame
         for metric_key in self.CI_METRICS:
-            metric_names.append(metric_key)
-            ci_metric_values.append(self.metrics[metric_key])
+            metric_values = self.metrics[metric_key]
+            nb_features_steps = metric_values.shape[0]
+            metric_names.extend(['{}-{}'.format(metric_key, s) for s in range(nb_features_steps)])
+            ci_metric_values.append(metric_values)
         ci_metric_values = np.vstack(ci_metric_values)
         self._save_metric_to_file(os.path.join(base_output_folder_path, 'CI_All_metrics.txt'),
                                   ci_metric_values, columns=['Mean', 'Lower', 'Upper'],
                                   index=metric_names)
+
+    def _save_test_metrics_to_file(self, base_output_folder_path):
+        """
+        Save all basic metrics to corresponding files.
+
+        Parameters
+        ----------
+        base_output_folder_path: str
+            Path to the output folder where files will be saved.
+
+        """
+
+        column_name = []
+        self.metrics[self.TEST].pop(self.PREDS)
+        test_metrics = np.zeros((1, len(self.metrics[self.TEST].keys())))
+        for i, item in enumerate(self.metrics[self.TEST].items()):
+            key, value = item
+            test_metrics[0, i] = value
+            column_name.append(key)
+
+        self._save_metric_to_file(os.path.join(base_output_folder_path, 'metric_test.txt'),
+                                  test_metrics, column_name)
 
     @staticmethod
     def _generate_feature_steps(nb_features):
@@ -494,7 +574,7 @@ class DAP(ABC):
         ranking = self.feature_ranker(X_train, y_train, seed=seed)
         return ranking
 
-    def _select_ranked_features(self, X_train, X_validation, ranked_feature_indices):
+    def _select_ranked_features(self, ranked_feature_indices, X_train, X_validation=None):
         """Filter features according to input ranking
         
         Parameters
@@ -518,8 +598,10 @@ class DAP(ABC):
         """
 
         X_train_fs = X_train[:, ranked_feature_indices]
-        X_val_fs = X_validation[:, ranked_feature_indices]
-        return X_train_fs, X_val_fs
+        if X_validation is not None:
+            X_val_fs = X_validation[:, ranked_feature_indices]
+            return X_train_fs, X_val_fs
+        return X_train_fs
 
     def _fit_predict(self, model, X_train, y_train, X_validation, y_validation=None):
         """
@@ -735,7 +817,7 @@ class DAP(ABC):
 
         # 3. Apply Feature Ranking
         ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
-        Xs_train_fs = X_train[:, ranking[:best_nb_features]]
+        Xs_train_fs = self._select_ranked_features(ranking[:best_nb_features], X_train)
 
         # 4. Fit the model
         model = self.ml_model
@@ -819,7 +901,7 @@ class DAP(ABC):
                 # 4. Iterate over Feature Steps
                 for step, nb_features in enumerate(k_features_indices):
                     # 4.1 Select Ranked Features
-                    X_train_fs, X_val_fs = self._select_ranked_features(X_train, X_validation, ranking[:nb_features])
+                    X_train_fs, X_val_fs = self._select_ranked_features(ranking[:nb_features], X_train, X_validation)
 
                     # Store contextual info about current number of features used in this iteration and
                     # corresponding feature step.
@@ -829,7 +911,7 @@ class DAP(ABC):
                     self._nb_features = nb_features
                     self._feature_step_nb = step
 
-                    # 5. Fit and Predict
+                    # 5. Fit and Predict\
                     model = self.ml_model
                     # 5.1 Train the model and generate predictions (inference)
                     predicted_classes, predicted_class_probs, extra_metrics = self._fit_predict(model,
@@ -850,6 +932,18 @@ class DAP(ABC):
 
         # Finally return the trained model
         return dap_model
+
+    def predict_on_test(self, model, X_test, Y_test):
+
+        X_test = self._prepare_data(X_test)
+
+        predicted_classes, predicted_class_probs = self._predict(model, X_test)
+        self._compute_test_metrics(Y_test, predicted_classes, predicted_class_probs)
+
+        output_dir = self._get_output_folder()
+
+        self._save_test_metrics_to_file(output_dir)
+
 
 
 class DeepLearningDAP(DAP):
@@ -1033,6 +1127,46 @@ class DeepLearningDAP(DAP):
                         values = np.array(metric_values)
                     self.metrics[metric_name][self._iteration_step_nb, self._feature_step_nb] = values
 
+    def _compute_extra_test_metrics(self, test_labels=None, predicted_labels=None,
+                                    predicted_class_probs=None, **extra_metrics):
+        """
+        Compute extra additional step metrics, specific to Neural Network leaning resulting from 
+        Keras Models.
+        In details, kwargs is expected to contain a key for 'model_history'.
+
+        Parameters
+        ----------
+
+        test_labels: array-like, shape = (n_samples, )
+            Array of labels for samples in the validation set
+
+        predicted_labels: array-like, shape = (n_samples, )
+            Array of predicted labels for each sample in the validation set
+
+        predicted_class_probs: array-like, shape = (n_samples, n_classes)
+            matrix containing the probability for each class and for each sample in the
+            validation set
+
+        extra_metrics: dict
+            By default, the list of extra metrics will contain model history resulting after training.
+            See Also: `_fit_predict` method.
+        """
+
+        # Compute Extra Metrics
+        model_history = extra_metrics.get(self.HISTORY, None)
+        if model_history:
+            standard_metrics = ['loss', 'val_loss', 'acc', 'val_acc']
+            metric_keys = [self.NN_LOSS, self.NN_VAL_LOSS, self.NN_ACC, self.NN_VAL_ACC]
+            for history_key, metric_name in zip(standard_metrics, metric_keys):
+                metric_values = model_history.history.get(history_key, None)
+                if metric_values:
+                    if len(metric_values) < settings.epochs:  # early stopping case
+                        values = np.zeros(shape=settings.epochs)
+                        values[:len(metric_values)] = metric_values
+                    else:
+                        values = np.array(metric_values)
+                    self.metrics[self.TEST][metric_name] = values
+
     def _save_all_metrics_to_file(self, base_output_folder_path, feature_steps, feature_names, sample_names):
         """
         Specialised implementation for Deep learning models, saving to files also 
@@ -1161,6 +1295,8 @@ class DeepLearningDAP(DAP):
         # Setup extra fit parameters from settings
         if X_validation is not None and y_validation is not None:
             self.extra_fit_params['validation_data'] = (X_validation, y_validation)
+        else:
+            self.extra_fit_params.pop('validation_data', None)
 
         model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_nb, self._nb_features)
         base_output_folder = self._get_output_folder()
@@ -1168,9 +1304,12 @@ class DeepLearningDAP(DAP):
         callbacks = [ModelCheckpoint(filepath=model_filename, save_best_only=True, save_weights_only=True), ]
         if self.fit_callbacks:
             callbacks.extend(self.fit_callbacks)
+            if X_validation is None:
+                for callback in callbacks:
+                    if hasattr(callback, 'monitor') and callback.monitor == 'val_loss':
+                        callback.monitor = 'loss'
 
         if self.fit_verbose != 0:
-            print('\n')
             print('Experiment {} - fold {}'.format(self._runstep_nb + 1, self._fold_nb + 1))
             print('Step {}, working with {} features'.format(self._feature_step_nb + 1, self._nb_features))
 
