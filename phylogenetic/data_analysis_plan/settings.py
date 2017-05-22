@@ -136,7 +136,8 @@ initial_epoch = 0  # Default: 0 -  first epoch!
 # model fit, please add configured keras Callbacks objects
 # in the list below
 from keras.callbacks import EarlyStopping
-callbacks = [EarlyStopping(monitor='val_loss', patience=4)]
+callbacks = [EarlyStopping(monitor='val_loss', patience=4,
+                           min_delta=1e-06, mode='min')]
 
 # -----------------------
 # 2 Model Compile Section
