@@ -336,7 +336,7 @@ def phylo_convutional_block(Xs, Crd, nb_neighbors, nb_features, filters):
     return Xs_new, Crd_new
 
 
-class PhyloConv2(Conv2D):
+class PhyloConv2(Conv1D):
 
     # TODO: Check if is really a conv1D what we want to do....
 
@@ -360,8 +360,8 @@ class PhyloConv2(Conv2D):
 
         super(PhyloConv2, self).__init__(
             filters=filters,
-            kernel_size=(1, nb_neighbors),
-            strides=(1, nb_neighbors),
+            kernel_size=nb_neighbors,
+            strides=nb_neighbors,
             activation=activation,
             kernel_initializer=kernel_initializer,
             bias_initializer=bias_initializer,
@@ -373,26 +373,14 @@ class PhyloConv2(Conv2D):
             **kwargs
         )
 
+        # TODO: Check if there is a better solution
         self.input_spec = [InputSpec(shape=(None, coordinates.shape[1].value, coordinates.shape[2].value)),
                            InputSpec(shape=coordinates.shape)]
 
     def build(self, input_shape):
 
-        conv_shape = (input_shape[0][0], 1) + (input_shape[0][1:])
-
-        super(PhyloConv2, self).build(conv_shape)
+        super(PhyloConv2, self).build(input_shape[0])
         self.input_spec = [InputSpec(ndim=3), InputSpec(ndim=3)]
-
-    def _drop_second_dimension(self, X):
-
-        second_axis_last = [0, 2, 3, 1]
-
-        input_shape = [s.value if s.value else -1 for s in X.shape]
-        output_shape = (input_shape[0], input_shape[2], input_shape[3])
-
-        output = K.reshape(K.permute_dimensions(X, second_axis_last), output_shape)
-
-        return output
 
     def call(self, inputs, **kwargs):
 
@@ -408,11 +396,8 @@ class PhyloConv2(Conv2D):
 
         # Convolution step
 
-        X_conv = super(PhyloConv2, self).call(K.expand_dims(X_phylongb, 1))
-        C_conv = super(PhyloConv2, self).call(K.expand_dims(Coord_phylongb, 1))
-
-        X_conv = self._drop_second_dimension(X_conv)
-        C_conv = self._drop_second_dimension(C_conv)
+        X_conv = super(PhyloConv2, self).call(X_phylongb)
+        C_conv = super(PhyloConv2, self).call(Coord_phylongb)
 
         output = [X_conv, C_conv]
 
@@ -421,19 +406,17 @@ class PhyloConv2(Conv2D):
     def compute_output_shape(self, input_shape):
 
         X_shape = (input_shape[0][0],
-                   1,
                    input_shape[0][1] * self.nb_neighbors,
                    input_shape[0][2])
         C_shape = (input_shape[1][0],
-                   1,
                    input_shape[1][1] * self.nb_neighbors,
                    input_shape[1][2])
 
         x = super(PhyloConv2, self).compute_output_shape(X_shape)
         y = super(PhyloConv2, self).compute_output_shape(C_shape)
 
-        return [(x[0], x[2], x[3]),
-                (y[0], y[2], y[3])]
+        return [x,
+                y]
 
     def compute_mask(self, inputs, mask=None):
         return [None, None]
