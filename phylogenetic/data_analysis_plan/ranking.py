@@ -5,10 +5,10 @@ This module defines all the objects and
 functions to be used in the settings 
 related to "feature ranking".
 """
-
 from .relief import ReliefF
 from sklearn.feature_selection import SelectKBest
 import numpy as np
+
 
 def random_ranking(X_train, y_train, seed=None):
     """Apply Random Feature Ranking
@@ -60,9 +60,9 @@ def relief_ranking(X_train, y_train, seed=None):
     """
     if not seed:
         seed = np.random.seed(1234)
-    relief = ReliefF(k=3, seed=seed)
-    relief.learn(X_train, y_train)
-    w = relief.w()
+    relief_model = ReliefF(k=3, seed=seed)
+    relief_model.learn(X_train, y_train)
+    w = relief_model.w()
     ranking = np.argsort(w)[::-1]
     return ranking
 
@@ -95,5 +95,36 @@ def kbest_ranking(X_train, y_train, seed=None):
     ranking = np.argsort(-np.log10(selector.pvalues_))[::-1]
     return ranking
 
+
 # Aliases for settings
 kbest = KBEST = kbest_ranking
+
+
+_REVERSE_NAMES_MAP = {
+    hash(random): 'random',
+    hash(relief): 'relief',
+    hash(kbest): 'kbest'
+}
+
+
+def get_feature_ranking_name(reference):
+    """Returns a textual representation of 
+    selected feature ranking method, provided
+    in input as reference. This backward mapping
+    function is mainly used whenever it is
+    required to have a string representation
+    of a class or a function to generate file names
+    or to printout logs.
+    
+    Parameters
+    ----------
+    reference: object (i.e. function or class)
+        Reference to the feature ranking method 
+        selected in settings.
+        
+    Returns
+    -------
+    str:
+        Textual name of ranking method
+    """
+    return _REVERSE_NAMES_MAP.get(hash(reference), 'no_name')

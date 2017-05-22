@@ -1,5 +1,7 @@
-import os
+"""Main module implementing Data Analysis Plan
+"""
 
+import os
 import mlpy
 import numpy as np
 import pandas as pd
@@ -7,7 +9,10 @@ import pandas as pd
 from keras.utils import np_utils
 
 from . import settings
-from .performance import npv, ppv, sensitivity, specificity, KCCC_discrete, dor, accuracy
+from .scaling import get_feature_scaling_name
+from .ranking import get_feature_ranking_name
+from .performance import (npv, ppv, sensitivity, specificity,
+                          KCCC_discrete, dor, accuracy)
 from sklearn.metrics import roc_auc_score
 
 from keras.callbacks import ModelCheckpoint
@@ -87,21 +92,24 @@ class DAP(ABC):
         # ML model to be used in the `fit_predict` step.
         self.ml_model_ = None
 
-        # -- Contextual Information: Attributes saving information on the
-        # context of the DAP process, namely the reference to the iteration no. of the
-        # CV, and corresponding feature step. These information will be updated
-        # throughout the execution of the process, keeping track of actual progresses.
-
+        # Contextual Information:
+        # -----------------------
+        # Attributes saving information on the context of the DAP process,
+        # namely the reference to the iteration no. of the CV,
+        # corresponding feature step, and so on.
+        # This information will be updated throughout the execution of the process,
+        # keeping track of current actual progresses.
+        self._fold_training_indices = None  # indices of samples in training set
+        self._fold_validation_indices = None  # indices of samples in validation set
         self._iteration_step_no = -1
         self._feature_step_no = -1
-        # Store the actual number of features used during each iteration
-        # and each feature step.
+        # Store the number of features in each iteration/feature step.
+        self._nb_features = -1
         # Note: This attribute is not really used in this general DAP process,
         # although this is paramount for its DeepLearning extension.
         # In fact it is mandatory to know
-        # the total number of features to use so to properly
-        # set the shape of the first InputLayer.
-        self._nb_features = -1
+        # the total number of features to be used so to properly
+        # set the shape of the first InputLayer(s).
 
     @property
     def ml_model(self):
@@ -109,6 +117,18 @@ class DAP(ABC):
         if not self.ml_model_:
             self.ml_model_ = self._create_ml_model()
         return self.ml_model_
+
+    @property
+    def feature_scaling_name(self):
+        if isinstance(self.feature_scaler, str):
+            return self.feature_scaler
+        return get_feature_scaling_name(self.feature_scaler)
+
+    @property
+    def feature_ranking_name(self):
+        if isinstance(self.feature_ranker, str):
+            return self.feature_ranker
+        return get_feature_ranking_name(self.feature_ranker)
 
     # ====== Abstract Methods ======
     #
@@ -363,7 +383,7 @@ class DAP(ABC):
         if settings.use_top_feature:
             k_features_indices.append(1)
         for percentage in settings.feature_ranges:
-            k = np.floor((nb_features * percentage) / 100).astype(np.int) + 1
+            k = np.ceil((nb_features * percentage) / 100).astype(np.int)
             k_features_indices.append(k)
 
         return k_features_indices
@@ -708,7 +728,7 @@ class DAP(ABC):
         # 2.1 Apply Feature Scaling (if needed)
         if self.apply_feature_scaling:
             X_train = self.feature_scaler.fit_transform(X_train)
-            # Note: self.feature_scaler stores the reference to trained scaler
+            # Note: self.feature_scaler already stores the reference to scaler object
 
         # 3. Apply Feature Ranking
         ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
@@ -764,8 +784,10 @@ class DAP(ABC):
                 print('{} over {} experiments'.format(runstep + 1, self.cv_n))
 
             for fold, (training_indices, validation_indices) in enumerate(kfold_indices):
-
+                # Save contextual information
                 self._iteration_step_no = runstep * self.cv_k + fold
+                self._fold_training_indices = training_indices
+                self._fold_validation_indices = validation_indices
 
                 if verbose:
                     print('=' * 80)
@@ -778,12 +800,12 @@ class DAP(ABC):
                 # 2.1 Apply Feature Scaling (if needed)
                 if self.apply_feature_scaling:
                     if verbose:
-                        print('-- centering and normalization using: {}'.format(str(self.feature_scaler)))
+                        print('-- centering and normalization using: {}'.format(self.feature_scaling_name))
                     X_train, X_validation = self._apply_scaling(X_train, X_validation)
 
                 # 3. Apply Feature Ranking
                 if verbose:
-                    print('-- ranking the features using: {}'.format(str(self.feature_ranker)))
+                    print('-- ranking the features using: {}'.format(self.feature_ranking_name))
                 ranking = self._apply_feature_ranking(X_train, y_train, seed=runstep)
                 self.metrics[self.RANKINGS][self._iteration_step_no] = ranking  # store ranking
 
@@ -864,6 +886,7 @@ class DeepLearningDAP(DAP):
 
         # Model Cache - one model reference per feature step
         self._model_cache = {}
+        self._seralisation_ok = True  # Checks whether model serialisation works
 
     @property
     def ml_model(self):
@@ -883,10 +906,20 @@ class DeepLearningDAP(DAP):
         cache_key = self._nb_features
         if cache_key in self._model_cache:
             identifier = self._model_cache[cache_key]
-            self.ml_model_ = deserialize_keras_object(identifier=identifier)
+            if self._seralisation_ok:
+                self.ml_model_ = deserialize_keras_object(identifier=identifier)
+            else:
+                model = self._model_cache[cache_key]
+                self._reshuffle_weights(model)
+                self.ml_model_ = model
         else:
             model = self._create_ml_model()
-            self._model_cache[cache_key] = serialize_keras_object(model)
+            try:
+                self._model_cache[cache_key] = serialize_keras_object(model)
+            except:
+                # Something went wrong during serialisation
+                self._seralisation_ok = False
+                self._model_cache[cache_key] = model
             self.ml_model_ = model
         return self.ml_model_
 
@@ -964,10 +997,11 @@ class DeepLearningDAP(DAP):
         model_history = extra_metrics.get(self.HISTORY, None)
         if model_history:
             standard_metrics = ['loss', 'val_loss', 'acc', 'val_acc']
-            metric_keys = [self.NN_LOSS, self.NN_VAL_LOSS, self.ACC, self.NN_VAL_ACC]
-            for metric_name, key in zip(standard_metrics, metric_keys):
-                metric_values = model_history.history.get(metric_name, None)
-                self.metrics[metric_name][self._iteration_step_no, self._feature_step_no] = metric_values
+            metric_keys = [self.NN_LOSS, self.NN_VAL_LOSS, self.NN_ACC, self.NN_VAL_ACC]
+            for history_key, metric_name in zip(standard_metrics, metric_keys):
+                metric_values = model_history.history.get(history_key, None)
+                if metric_values:
+                    self.metrics[metric_name][self._iteration_step_no, self._feature_step_no] = np.array(metric_values)
 
     def _save_all_metrics_to_file(self, base_output_folder_path, feature_steps, feature_names, sample_names):
         """
@@ -1095,7 +1129,7 @@ class DeepLearningDAP(DAP):
         """
 
         # Setup extra fit parameters from settings
-        if X_validation and y_validation:
+        if X_validation is not None and y_validation is not None:
             self.extra_fit_params['validation_data'] = (X_validation, y_validation)
 
         model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_no, self._nb_features)
@@ -1148,3 +1182,29 @@ class DeepLearningDAP(DAP):
         predicted_class_probs = model.predict(X_validation)
         predicted_classes = predicted_class_probs.argmax(axis=-1)
         return predicted_classes, predicted_class_probs
+
+    @staticmethod
+    def _reshuffle_weights(model, weights=None):
+        """
+        Randomly permute all the weights in `model`, or the given `weights`.
+        
+        This is a fast approximation of re-initializing the weights of a model.
+        Assumes weights are distributed independently of the dimensions of the 
+        weight tensors (i.e., the weights have the same distribution 
+        along each dimension).
+        
+        Parameters
+        ----------
+        model: keras.models.Model
+            Modify the weights of the given model.
+        weights: list(ndarray)
+            The model's weights will be replaced by a random permutation of 
+            these weights.
+            If `None`, permute the model's current weights.
+        """
+        if weights is None:
+            weights = model.get_weights()
+        weights = [np.random.permutation(w.flat).reshape(w.shape) for w in weights]
+        # Faster, but less random: only permutes along the first dimension
+        # weights = [np.random.permutation(w) for w in weights]
+        model.set_weights(weights)
