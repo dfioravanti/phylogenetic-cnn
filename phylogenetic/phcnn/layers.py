@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from keras.layers import Layer, InputSpec
-from keras.layers.convolutional import Conv1D, Conv2D
+from keras.layers import InputSpec
+from keras.layers.convolutional import Conv1D
 
 from keras import backend as K
 import tensorflow as tf
-from pickle import HIGHEST_PROTOCOL, dumps, loads
 
 
 def _transpose_on_first_two_axes(X):
