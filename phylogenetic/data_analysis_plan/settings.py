@@ -7,9 +7,9 @@
 # ---------------------------
 
 # No. Repetitions
-Cv_N = 1
+Cv_N = 10
 # No. Fold
-Cv_K = 2
+Cv_K = 5
 
 # Apply Stratification to labels when
 # generating folds.
@@ -71,7 +71,7 @@ use_top_feature = False
 # C. Deep Learning Models Hyperparameter Section
 # =================================================
 
-# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # This following section contains settings
 # that will be used only by the
 # `DeepLearningDAP` class!
@@ -82,7 +82,7 @@ use_top_feature = False
 # ___________________
 
 # No. of Epochs
-epochs = 2
+epochs = 200
 
 # Size of the Batch
 batch_size = 32
@@ -135,7 +135,8 @@ initial_epoch = 0  # Default: 0 -  first epoch!
 # To automatically plug additional callbacks into
 # model fit, please add configured keras Callbacks objects
 # in the list below
-callbacks = []
+from keras.callbacks import EarlyStopping
+callbacks = [EarlyStopping(monitor='val_loss', patience=4)]
 
 # -----------------------
 # 2 Model Compile Section
