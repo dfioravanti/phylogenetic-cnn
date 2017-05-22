@@ -10,7 +10,7 @@ from data_analysis_plan import DeepLearningDAP
 
 from keras.engine import Input, Model
 from keras.layers import Lambda, MaxPooling1D, Flatten, Dropout, Dense
-from phcnn.layers import phylo_convutional_block
+from phcnn.layers import PhyloConv1D, euclidean_distances
 from keras.backend import floatx
 
 
@@ -73,9 +73,8 @@ class PhyloDAP(DeepLearningDAP):
         conv_layer = data
         conv_crd = Lambda(lambda c: c[0])(coordinates)
         for nb_filters, nb_neighbors in zip(filters, nb_neighbours):
-            conv_layer, conv_crd = phylo_convutional_block(conv_layer, conv_crd, nb_neighbors,
-                                                     nb_features, nb_filters)
-
+            distances = euclidean_distances(conv_crd)
+            conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
         max = MaxPooling1D(pool_size=2, padding="valid")(conv_layer)
         flatt = Flatten()(max)
         drop = Dropout(0, 1)(Dense(units=64)(flatt))
@@ -84,6 +83,12 @@ class PhyloDAP(DeepLearningDAP):
 
         model = Model(inputs=[data, coordinates], outputs=output)
         return model
+
+    @staticmethod
+    def custom_layers_objects():
+        """Return the dictionary mapping PhyloConv1D layers to 
+        proper objects for correct de-serialisation of cached models."""
+        return {'PhyloConv1D': PhyloConv1D}
 
     # ==== Overriding (some of) default methods behaviours ====
 
