@@ -207,8 +207,47 @@ def _top_k(dist, k):
 
 
 class PhyloConv1D(Conv1D):
-    """
+    """1D phylo convolution layer
+
+    This layer is divided in two logical step, first at every feature we add 
+    the nb_neighbor - 1 closest features. After that we create a convolutional kernel 
+    whom convolves the original feature with the added one in order to create a new
+    metafeature which is then returned as output.
     
+    # Arguments
+        distances: K.Tensor, a tensor of shape (nb_features, nb_features)
+            where distances[i, j] = the jth less distant feature from 
+            the ith feature computed according to some algorithm. 
+        nb_neighbors: Integer, the number of neighbors to be 
+            added to any existing feature.
+        filters: Integer, the dimensionality of the output space
+            (i.e. the number output of filters in the convolution).
+        activation: Activation function to use
+            (see [activations](../activations.md)).
+            If you don't specify anything, no activation is applied
+            (ie. "linear" activation: `a(x) = x`).
+        kernel_initializer: Initializer for the `kernel` weights matrix
+            (see [initializers](../initializers.md)).
+        bias_initializer: Initializer for the bias vector
+            (see [initializers](../initializers.md)).
+        kernel_regularizer: Regularizer function applied to
+            the `kernel` weights matrix
+            (see [regularizer](../regularizers.md)).
+        bias_regularizer: Regularizer function applied to the bias vector
+            (see [regularizer](../regularizers.md)).
+        activity_regularizer: Regularizer function applied to
+            the output of the layer (its "activation").
+            (see [regularizer](../regularizers.md)).
+        kernel_constraint: Constraint function applied to the kernel matrix
+            (see [constraints](../constraints.md)).
+        bias_constraint: Constraint function applied to the bias vector
+            (see [constraints](../constraints.md)).
+
+    # Input shape
+        3D tensor with shape: `(batch_size, nb_features, nb_filters)`
+
+    # Output shape
+        3D tensor with shape: `(batch_size, nb_features, filters)`
     """
     def __init__(self,
                  distances,
@@ -248,14 +287,8 @@ class PhyloConv1D(Conv1D):
 
     def build(self, input_shape):
         """
-        
-        Parameters
-        ----------
-        input_shape
-
-        Returns
-        -------
-
+        Since the build of Conv1D changes input_spec we need to 
+        overwrite the change
         """
         input_spec = self.input_spec
         super(PhyloConv1D, self).build(input_shape[0])
@@ -266,15 +299,23 @@ class PhyloConv1D(Conv1D):
         
         Parameters
         ----------
-        inputs
-        kwargs
+        inputs: List of K.Tensors. The first entry is assumed to be
+            the sample of our experiment while the second entry is 
+            assumed to be the tensor of the coordinates associated with 
+            the features that we are considering.
 
         Returns
         -------
+        outputs: List of K.Tensor. The first entry is the convolution of the 
+            sample after at every feature we added the nb_neighbors closest ones.
+            The second entry is the convolution of the coordinates sample after 
+            at every feature we added the nb_neighbors closest ones. Is important
+            to notice that both convolutions use the same weights.
 
         """
         X = inputs[0]
         Coord = inputs[1]
+
         # Phylo neighbors step
         neighbor_indexes = _top_k(-self.distances, k=self.nb_neighbors)
         target_neighbors = neighbor_indexes[0: self.nb_features, 0:self.nb_neighbors, :]
@@ -285,14 +326,19 @@ class PhyloConv1D(Conv1D):
         X_conv = super(PhyloConv1D, self).call(X_phylongb)
         C_conv = super(PhyloConv1D, self).call(Coord_phylongb)
 
-        output = [X_conv, C_conv]
+        outputs = [X_conv, C_conv]
 
-        return output
+        return outputs
 
     def compute_output_shape(self, input_shape):
 
+        """
+        In order to compute the correct output shape we need to consider
+        that every feature is now followed by the nb_neighbors closest one
+        """
 
         input_shape_X, input_shape_C = input_shape[0], input_shape[1]
+
         X_shape = (input_shape_X[0],
                    input_shape_X[1] * self.nb_neighbors,
                    input_shape_X[2])
@@ -305,16 +351,6 @@ class PhyloConv1D(Conv1D):
         return [x, y]
 
     def compute_mask(self, inputs, mask=None):
-        """
-        
-        Parameters
-        ----------
-        inputs
-        mask
 
-        Returns
-        -------
-
-        """
         # TODO Add support for Masking, in case
         return [None, None]
