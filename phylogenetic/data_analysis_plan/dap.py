@@ -383,7 +383,7 @@ class DAP(ABC):
         if settings.use_top_feature:
             k_features_indices.append(1)
         for percentage in settings.feature_ranges:
-            k = np.floor((nb_features * percentage) / 100).astype(np.int) + 1
+            k = np.ceil((nb_features * percentage) / 100).astype(np.int)
             k_features_indices.append(k)
 
         return k_features_indices
@@ -728,7 +728,7 @@ class DAP(ABC):
         # 2.1 Apply Feature Scaling (if needed)
         if self.apply_feature_scaling:
             X_train = self.feature_scaler.fit_transform(X_train)
-            # Note: self.feature_scaler stores the reference to trained scaler
+            # Note: self.feature_scaler already stores the reference to scaler object
 
         # 3. Apply Feature Ranking
         ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
@@ -886,6 +886,7 @@ class DeepLearningDAP(DAP):
 
         # Model Cache - one model reference per feature step
         self._model_cache = {}
+        self._seralisation_ok = True  # Checks whether model serialisation works
 
     @property
     def ml_model(self):
@@ -905,10 +906,20 @@ class DeepLearningDAP(DAP):
         cache_key = self._nb_features
         if cache_key in self._model_cache:
             identifier = self._model_cache[cache_key]
-            self.ml_model_ = deserialize_keras_object(identifier=identifier)
+            if self._seralisation_ok:
+                self.ml_model_ = deserialize_keras_object(identifier=identifier)
+            else:
+                model = self._model_cache[cache_key]
+                self._reshuffle_weights(model)
+                self.ml_model_ = model
         else:
             model = self._create_ml_model()
-            self._model_cache[cache_key] = serialize_keras_object(model)
+            try:
+                self._model_cache[cache_key] = serialize_keras_object(model)
+            except:
+                # Something went wrong during serialisation
+                self._seralisation_ok = False
+                self._model_cache[cache_key] = model
             self.ml_model_ = model
         return self.ml_model_
 
@@ -986,10 +997,11 @@ class DeepLearningDAP(DAP):
         model_history = extra_metrics.get(self.HISTORY, None)
         if model_history:
             standard_metrics = ['loss', 'val_loss', 'acc', 'val_acc']
-            metric_keys = [self.NN_LOSS, self.NN_VAL_LOSS, self.ACC, self.NN_VAL_ACC]
-            for metric_name, key in zip(standard_metrics, metric_keys):
-                metric_values = model_history.history.get(metric_name, None)
-                self.metrics[metric_name][self._iteration_step_no, self._feature_step_no] = metric_values
+            metric_keys = [self.NN_LOSS, self.NN_VAL_LOSS, self.NN_ACC, self.NN_VAL_ACC]
+            for history_key, metric_name in zip(standard_metrics, metric_keys):
+                metric_values = model_history.history.get(history_key, None)
+                if metric_values:
+                    self.metrics[metric_name][self._iteration_step_no, self._feature_step_no] = np.array(metric_values)
 
     def _save_all_metrics_to_file(self, base_output_folder_path, feature_steps, feature_names, sample_names):
         """
@@ -1117,7 +1129,7 @@ class DeepLearningDAP(DAP):
         """
 
         # Setup extra fit parameters from settings
-        if X_validation and y_validation:
+        if X_validation is not None and y_validation is not None:
             self.extra_fit_params['validation_data'] = (X_validation, y_validation)
 
         model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_no, self._nb_features)
@@ -1170,3 +1182,29 @@ class DeepLearningDAP(DAP):
         predicted_class_probs = model.predict(X_validation)
         predicted_classes = predicted_class_probs.argmax(axis=-1)
         return predicted_classes, predicted_class_probs
+
+    @staticmethod
+    def _reshuffle_weights(model, weights=None):
+        """
+        Randomly permute all the weights in `model`, or the given `weights`.
+        
+        This is a fast approximation of re-initializing the weights of a model.
+        Assumes weights are distributed independently of the dimensions of the 
+        weight tensors (i.e., the weights have the same distribution 
+        along each dimension).
+        
+        Parameters
+        ----------
+        model: keras.models.Model
+            Modify the weights of the given model.
+        weights: list(ndarray)
+            The model's weights will be replaced by a random permutation of 
+            these weights.
+            If `None`, permute the model's current weights.
+        """
+        if weights is None:
+            weights = model.get_weights()
+        weights = [np.random.permutation(w.flat).reshape(w.shape) for w in weights]
+        # Faster, but less random: only permutes along the first dimension
+        # weights = [np.random.permutation(w) for w in weights]
+        model.set_weights(weights)
