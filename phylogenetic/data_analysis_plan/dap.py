@@ -17,7 +17,6 @@ from .performance import (npv, ppv, sensitivity, specificity,
 from sklearn.metrics import roc_auc_score
 
 from keras.callbacks import ModelCheckpoint
-from keras.utils import serialize_keras_object, deserialize_keras_object
 
 from abc import ABC, abstractmethod
 
@@ -102,8 +101,10 @@ class DAP(ABC):
         # keeping track of current actual progresses.
         self._fold_training_indices = None  # indices of samples in training set
         self._fold_validation_indices = None  # indices of samples in validation set
-        self._iteration_step_no = -1
-        self._feature_step_no = -1
+        self._iteration_step_nb = -1
+        self._feature_step_nb = -1
+        self._runstep_nb = -1
+        self._fold_nb = -1
         # Store the number of features in each iteration/feature step.
         self._nb_features = -1
         # Note: This attribute is not really used in this general DAP process,
@@ -111,6 +112,7 @@ class DAP(ABC):
         # In fact it is mandatory to know
         # the total number of features to be used so to properly
         # set the shape of the first InputLayer(s).
+        # Contextual information exposed in order to be used for verbose printing
 
     @property
     def ml_model(self):
@@ -234,7 +236,7 @@ class DAP(ABC):
         """
 
         # Compute Base Step Metrics
-        iteration_step, feature_step = self._iteration_step_no, self._feature_step_no
+        iteration_step, feature_step = self._iteration_step_nb, self._feature_step_nb
         self.metrics[self.PREDS][iteration_step, feature_step, validation_indices] = predicted_labels
         self.metrics[self.NPV][iteration_step, feature_step] = npv(validation_labels, predicted_labels)
         self.metrics[self.PPV][iteration_step, feature_step] = ppv(validation_labels, predicted_labels)
@@ -719,8 +721,8 @@ class DAP(ABC):
 
         # update contextual information
         self._nb_features = best_nb_features  # set this attr. to possibly reference the model
-        self._iteration_step_no = self.cv_n + 1  # last step
-        self._feature_step_no = self.cv_n + 1  # flag value indicating last step
+        self._iteration_step_nb = self.cv_n + 1  # last step
+        self._feature_step_nb = self.cv_n + 1  # flag value indicating last step
 
         # Set Training data
         X_train = self.X
@@ -772,6 +774,9 @@ class DAP(ABC):
 
         for runstep in range(self.cv_n):
 
+            # Save contextual information
+            self._runstep_nb = runstep
+
             # 1. Generate K-Folds
             if self.is_stratified:
                 kfold_indices = mlpy.cv_kfold(n=self.experiment_data.nb_samples,
@@ -786,13 +791,14 @@ class DAP(ABC):
 
             for fold, (training_indices, validation_indices) in enumerate(kfold_indices):
                 # Save contextual information
-                self._iteration_step_no = runstep * self.cv_k + fold
+                self._iteration_step_nb = runstep * self.cv_k + fold
+                self._fold_nb = fold
                 self._fold_training_indices = training_indices
                 self._fold_validation_indices = validation_indices
 
                 if verbose:
                     print('=' * 80)
-                    print('{} over {} folds'.format(fold + 1, self.cv_k))
+                    print('Experiment: {} - Fold {} over {} folds'.format(runstep + 1, fold + 1, self.cv_k))
 
                 # 2. Split data in Training and Validation sets
                 (X_train, X_validation), (y_train, y_validation) = self._train_validation_split(training_indices,
@@ -808,7 +814,7 @@ class DAP(ABC):
                 if verbose:
                     print('-- ranking the features using: {}'.format(self.feature_ranking_name))
                 ranking = self._apply_feature_ranking(X_train, y_train, seed=runstep)
-                self.metrics[self.RANKINGS][self._iteration_step_no] = ranking  # store ranking
+                self.metrics[self.RANKINGS][self._iteration_step_nb] = ranking  # store ranking
 
                 # 4. Iterate over Feature Steps
                 for step, nb_features in enumerate(k_features_indices):
@@ -821,7 +827,7 @@ class DAP(ABC):
                     # Note: The former will be effectively used in the `DeepLearningDAP` subclass to
                     # properly instantiate the Keras `InputLayer`.
                     self._nb_features = nb_features
-                    self._feature_step_no = step
+                    self._feature_step_nb = step
 
                     # 5. Fit and Predict
                     model = self.ml_model
@@ -1025,7 +1031,7 @@ class DeepLearningDAP(DAP):
                         values[:len(metric_values)] = metric_values
                     else:
                         values = np.array(metric_values)
-                    self.metrics[metric_name][self._iteration_step_no, self._feature_step_no] = values
+                    self.metrics[metric_name][self._iteration_step_nb, self._feature_step_nb] = values
 
     def _save_all_metrics_to_file(self, base_output_folder_path, feature_steps, feature_names, sample_names):
         """
@@ -1156,12 +1162,17 @@ class DeepLearningDAP(DAP):
         if X_validation is not None and y_validation is not None:
             self.extra_fit_params['validation_data'] = (X_validation, y_validation)
 
-        model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_no, self._nb_features)
+        model_filename = '{}_{}_model.hdf5'.format(self._iteration_step_nb, self._nb_features)
         base_output_folder = self._get_output_folder()
         model_filename = os.path.join(base_output_folder, model_filename)
         callbacks = [ModelCheckpoint(filepath=model_filename, save_best_only=True, save_weights_only=True), ]
         if self.fit_callbacks:
             callbacks.extend(self.fit_callbacks)
+
+        if self.fit_verbose != 0:
+            print('\n')
+            print('Experiment {} - fold {}'.format(self._runstep_nb + 1, self._fold_nb + 1))
+            print('Step {}, working with {} features'.format(self._feature_step_nb + 1, self._nb_features))
 
         model_history = model.fit(X_train, y_train, epochs=self.learning_epochs,
                                   batch_size=self.batch_size, verbose=self.fit_verbose,
