@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from keras.utils import np_utils
+from keras.models import model_from_json
 
 from . import settings
 from .scaling import get_feature_scaling_name
@@ -886,7 +887,7 @@ class DeepLearningDAP(DAP):
 
         # Model Cache - one model reference per feature step
         self._model_cache = {}
-        self._seralisation_ok = True  # Checks whether model serialisation works
+        self._do_serialisation = True  # Checks whether model serialisation works
 
     @property
     def ml_model(self):
@@ -905,22 +906,26 @@ class DeepLearningDAP(DAP):
         # during each iteration, before this !
         cache_key = self._nb_features
         if cache_key in self._model_cache:
-            identifier = self._model_cache[cache_key]
-            if self._seralisation_ok:
-                self.ml_model_ = deserialize_keras_object(identifier=identifier)
+            if self._do_serialisation:
+                try:
+                    from_json = self._model_cache[cache_key]
+                    model = model_from_json(from_json, custom_objects=self.custom_layers_objects())
+                except:
+                    self._do_serialisation = False
+                    self._model_cache = dict()  #reset cache
+                    model = self._create_ml_model()
             else:
-                model = self._model_cache[cache_key]
-                self._reshuffle_weights(model)
-                self.ml_model_ = model
+                model = self._create_ml_model()
         else:
             model = self._create_ml_model()
-            try:
-                self._model_cache[cache_key] = serialize_keras_object(model)
-            except:
-                # Something went wrong during serialisation
-                self._seralisation_ok = False
-                self._model_cache[cache_key] = model
-            self.ml_model_ = model
+            if self._do_serialisation:
+                try:
+                    self._model_cache[cache_key] = model.to_json()
+                except Exception as e:
+                    # Something went wrong during serialisation
+                    self._do_serialisation = False
+
+        self.ml_model_ = model
         return self.ml_model_
 
     def _create_ml_model(self):
@@ -944,6 +949,20 @@ class DeepLearningDAP(DAP):
         model.compile(loss=self.loss_function, optimizer=self.optimizer,
                       metrics=self.learning_metrics, **extra_compile_params)
         return model
+
+    @staticmethod
+    def custom_layers_objects():
+        """Utility method to specify references to custom layer objects, 
+        to be used in de-serialising models.
+        
+        Returns
+        -------
+        dic
+            dictionary mapping names (strings) to custom classes or functions to be
+            considered during deserialization. 
+            None by default (no custom layer)
+        """
+        return None
 
     @abstractmethod
     def _build_network(self):
@@ -1001,7 +1020,12 @@ class DeepLearningDAP(DAP):
             for history_key, metric_name in zip(standard_metrics, metric_keys):
                 metric_values = model_history.history.get(history_key, None)
                 if metric_values:
-                    self.metrics[metric_name][self._iteration_step_no, self._feature_step_no] = np.array(metric_values)
+                    if len(metric_values) < settings.epochs:  # early stopping case
+                        values = np.zeros(shape=settings.epochs)
+                        values[:len(metric_values)] = metric_values
+                    else:
+                        values = np.array(metric_values)
+                    self.metrics[metric_name][self._iteration_step_no, self._feature_step_no] = values
 
     def _save_all_metrics_to_file(self, base_output_folder_path, feature_steps, feature_names, sample_names):
         """
