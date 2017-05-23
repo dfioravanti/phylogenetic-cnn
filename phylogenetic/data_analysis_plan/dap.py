@@ -95,7 +95,7 @@ class DAP(ABC):
         self.ml_model_ = None
 
         # Store reference to the best feature ranking
-        self.best_feature_ranking = None
+        self._best_feature_ranking = None
 
         # Contextual Information:
         # -----------------------
@@ -820,7 +820,7 @@ class DAP(ABC):
 
         # 3. Apply Feature Ranking
         ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
-        self.best_feature_ranking = ranking
+        self._best_feature_ranking = ranking
         Xs_train_fs = self._select_ranked_features(ranking[:best_nb_features], X_train)
 
         # 4. Fit the model
@@ -874,6 +874,7 @@ class DAP(ABC):
             if verbose:
                 print('=' * 80)
                 print('{} over {} experiments'.format(runstep + 1, self.cv_n))
+                print('=' * 80)
 
             for fold, (training_indices, validation_indices) in enumerate(kfold_indices):
                 # Save contextual information
@@ -899,6 +900,7 @@ class DAP(ABC):
                 # 3. Apply Feature Ranking
                 if verbose:
                     print('-- ranking the features using: {}'.format(self.feature_ranking_name))
+                    print('=' * 80)
                 ranking = self._apply_feature_ranking(X_train, y_train, seed=runstep)
                 self.metrics[self.RANKINGS][self._iteration_step_nb] = ranking  # store ranking
 
@@ -924,11 +926,20 @@ class DAP(ABC):
                     self._compute_step_metrics(validation_indices, y_validation,
                                                predicted_classes, predicted_class_probs, **extra_metrics)
 
+                    if verbose:
+                        print("MCC: {}".format(
+                            self.metrics[self.MCC][self._iteration_step_nb, self._feature_step_nb]))
+
         # Compute Confidence Intervals for all target metrics
         self._compute_metrics_confidence_intervals(k_features_indices)
         # Save All Metrics to File
         self._save_all_metrics_to_file(base_output_folder, k_features_indices,
                                        self.experiment_data.feature_names, self.experiment_data.sample_names)
+
+        if verbose:
+            print('=' * 80)
+            print('Fitting and predict best model')
+            print('=' * 80)
 
         dap_model, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
         if extra_metrics:
