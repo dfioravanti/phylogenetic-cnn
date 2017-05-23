@@ -94,6 +94,9 @@ class DAP(ABC):
         # ML model to be used in the `fit_predict` step.
         self.ml_model_ = None
 
+        # Store reference to the best feature ranking
+        self.best_feature_ranking = None
+
         # Contextual Information:
         # -----------------------
         # Attributes saving information on the context of the DAP process,
@@ -817,6 +820,7 @@ class DAP(ABC):
 
         # 3. Apply Feature Ranking
         ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
+        self.best_feature_ranking = ranking
         Xs_train_fs = self._select_ranked_features(ranking[:best_nb_features], X_train)
 
         # 4. Fit the model
@@ -934,16 +938,16 @@ class DAP(ABC):
         return dap_model
 
     def predict_on_test(self, model, X_test, Y_test):
-
+        """"""
+        feature_ranking = self._best_feature_ranking[:self._nb_features]
+        X_test = self._select_ranked_features(feature_ranking, X_test)
+        # Prepare data before predict
         X_test = self._prepare_data(X_test)
-
         predicted_classes, predicted_class_probs = self._predict(model, X_test)
         self._compute_test_metrics(Y_test, predicted_classes, predicted_class_probs)
 
         output_dir = self._get_output_folder()
-
         self._save_test_metrics_to_file(output_dir)
-
 
 
 class DeepLearningDAP(DAP):
@@ -1010,7 +1014,7 @@ class DeepLearningDAP(DAP):
                 try:
                     from_json = self._model_cache[cache_key]
                     model = model_from_json(from_json, custom_objects=self.custom_layers_objects())
-                except:
+                except Exception:
                     self._do_serialisation = False
                     self._model_cache = dict()  #reset cache
                     model = self._create_ml_model()
@@ -1021,7 +1025,7 @@ class DeepLearningDAP(DAP):
             if self._do_serialisation:
                 try:
                     self._model_cache[cache_key] = model.to_json()
-                except Exception as e:
+                except Exception:
                     # Something went wrong during serialisation
                     self._do_serialisation = False
 
@@ -1356,29 +1360,3 @@ class DeepLearningDAP(DAP):
         predicted_class_probs = model.predict(X_validation)
         predicted_classes = predicted_class_probs.argmax(axis=-1)
         return predicted_classes, predicted_class_probs
-
-    @staticmethod
-    def _reshuffle_weights(model, weights=None):
-        """
-        Randomly permute all the weights in `model`, or the given `weights`.
-        
-        This is a fast approximation of re-initializing the weights of a model.
-        Assumes weights are distributed independently of the dimensions of the 
-        weight tensors (i.e., the weights have the same distribution 
-        along each dimension).
-        
-        Parameters
-        ----------
-        model: keras.models.Model
-            Modify the weights of the given model.
-        weights: list(ndarray)
-            The model's weights will be replaced by a random permutation of 
-            these weights.
-            If `None`, permute the model's current weights.
-        """
-        if weights is None:
-            weights = model.get_weights()
-        weights = [np.random.permutation(w.flat).reshape(w.shape) for w in weights]
-        # Faster, but less random: only permutes along the first dimension
-        # weights = [np.random.permutation(w) for w in weights]
-        model.set_weights(weights)
