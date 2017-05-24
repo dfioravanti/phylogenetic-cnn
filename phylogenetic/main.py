@@ -9,7 +9,14 @@ from utils import get_data, to_list
 from data_analysis_plan import DeepLearningDAP
 
 from keras.engine import Input, Model
-from keras.layers import Lambda, MaxPooling1D, Flatten, Dropout, Dense
+from keras.layers import (
+        Lambda,
+        MaxPooling1D,
+        Flatten,
+        Dropout,
+        Dense,
+        BatchNormalization
+    )
 from phcnn.layers import PhyloConv1D, euclidean_distances
 from keras.backend import floatx
 
@@ -75,9 +82,13 @@ class PhyloDAP(DeepLearningDAP):
         for nb_filters, nb_neighbors in zip(filters, nb_neighbours):
             distances = euclidean_distances(conv_crd)
             conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
+            conv_layer = BatchNormalization(axis=1)(conv_layer)
+            drop = Dropout(0.25, seed=np.random.seed())
+            conv_layer, conv_crd = drop(conv_layer), drop(conv_crd)
+
         max = MaxPooling1D(pool_size=2, padding="valid")(conv_layer)
         flatt = Flatten()(max)
-        drop = Dropout(0, 1)(Dense(units=64)(flatt))
+        drop = Dropout(0.25)(Dense(units=64)(flatt))
         output = Dense(units=nb_classes, kernel_initializer="he_normal",
                        activation="softmax", name='output')(drop)
 
@@ -198,6 +209,7 @@ def main():
 
     dap.predict_on_test(trained_model, inputs.test_data, inputs.test_targets)
 
+    print("Computation completed!")
 
 if __name__ == '__main__':
     main()
