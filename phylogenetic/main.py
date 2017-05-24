@@ -83,8 +83,7 @@ class PhyloDAP(DeepLearningDAP):
             distances = euclidean_distances(conv_crd)
             conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
             conv_layer = BatchNormalization(axis=1)(conv_layer)
-            drop = Dropout(0.25, seed=np.random.seed())
-            conv_layer, conv_crd = drop(conv_layer), drop(conv_crd)
+            conv_layer = Dropout(0.25, seed=np.random.seed())(conv_layer)
 
         max = MaxPooling1D(pool_size=2, padding="valid")(conv_layer)
         flatt = Flatten()(max)
