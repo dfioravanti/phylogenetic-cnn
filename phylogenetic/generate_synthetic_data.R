@@ -5,14 +5,14 @@ library(mvtnorm)
 set.seed(1234)
 
 # Total number of sample to be generated
-nb_total_output_samples <- 1000
+nb_total_output_samples <- 200
 
 # Proportion of test data to be generated
 proportion_test = 0.20
 
 # Path configuration
 
-desease <- "iCDr"
+desease <- "CDf"
 coordinates_path <- paste("datasets/coordinates/coordinates_", tolower(desease), ".txt", sep="")
 training_samples_path <- paste("datasets/true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
                                 desease, "_commsamp_training.txt", sep="")
@@ -23,8 +23,9 @@ training_target_path <- paste("datasets/true_data/HS_", desease, "/Sokol_16S_tax
 test_target_path <- paste("datasets/true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
                            desease, "_commsamp_validation_lab.txt", sep="")
 
-output_dir_path <- paste("datasets/synthetic_data/HS_", desease, sep="")
-dir.create(output_dir_path)
+output_dir_path <- paste("datasets/synthetic_data/HS_", desease,
+                         "/", nb_total_output_samples, sep="")
+dir.create(output_dir_path, recursive = TRUE)
 
 training_samples_output_path <- paste(output_dir_path, "/Sokol_16S_taxa_HS_",
                                       desease, "_commsamp_training.txt", sep="")
