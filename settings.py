@@ -19,7 +19,7 @@ TYPE_DATA = 'synthetic_data'
 
 # This can be empty, if so the datasets will be located in HD_DISEASE/
 # instead of HD_DISEASE/NB_SAMPLES
-NB_SAMPLES = '200'
+NB_SAMPLES = '300'
 
 TRAINING_DATA_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, ''.join(['HS_', DISEASE]), NB_SAMPLES,
                                       ''.join(['Sokol_16S_taxa_HS_', DISEASE, '_commsamp_training.txt']))

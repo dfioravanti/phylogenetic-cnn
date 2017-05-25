@@ -2,23 +2,23 @@
 # -*- coding: utf-8 -*-
 
 import os
+
 import numpy as np
-
-import settings
-from utils import get_data, to_list
-from data_analysis_plan import DeepLearningDAP
-
+from keras.backend import floatx
 from keras.engine import Input, Model
 from keras.layers import (
-        Lambda,
-        MaxPooling1D,
-        Flatten,
-        Dropout,
-        Dense,
-        BatchNormalization
-    )
+    Lambda,
+    MaxPooling1D,
+    Flatten,
+    Dropout,
+    Dense,
+    BatchNormalization
+)
+
+import settings
+from data_analysis_plan import DeepLearningDAP
 from phcnn.layers import PhyloConv1D, euclidean_distances
-from keras.backend import floatx
+from utils import get_data, to_list
 
 
 class PhyloDAP(DeepLearningDAP):
