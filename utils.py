@@ -15,7 +15,7 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
                                the remaining entries are the coordinates
     :param test_datafile: same structure as datafile, but it contains the test data
     :param test_label_datafile: same structure as labels_test_datafile, but it contains the test labels
-    :return: A dictionary with all the data required by phcnn
+    :return: A Bunch with all the data required by phcnn
     
     """
 
@@ -26,8 +26,14 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
     ys_test = np.loadtxt(test_label_datafile, dtype=np.int)
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
 
+    # Keras needs that all the batch sizes are the same. And it is impossible at the
+    # moment to pass a variable tot the model. Since coordinates is batch independent
+    # we need to expand it to match the shape of Xs but only the first "face" of coordinates
+    # is actually used all the rest is basically just pudding. This is a huge waste of memory but is
+    # the least worse solution we found.
     all_coordinates = np.empty((Xs.shape[0],) + coordinates.shape, dtype=np.float64)
-    all_coordinates[0] = coordinates
+    for i in range(Xs.shape[0]):
+        all_coordinates[i] = coordinates
 
     inputs = Bunch()
     inputs.feature_names = feature_names

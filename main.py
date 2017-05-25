@@ -50,7 +50,7 @@ class PhyloDAP(DeepLearningDAP):
 
     def _build_network(self):
         """
-        Build a PhyloCNN Network making use of custom `phylo_convolutional_blocks`.
+        Build a PhyloCNN Network.
         
         Returns
         -------
@@ -73,13 +73,16 @@ class PhyloDAP(DeepLearningDAP):
         coordinates = Input(shape=(nb_coordinates, nb_features, 1),
                             name="coordinates", dtype=floatx())
 
-        # TODO: Fix this one. Probably is better just to throw an exception
-        # if nb_neighbors > nb_features:
-        #     nb_neighbors = nb_features
-
         conv_layer = data
+
+        # We remove the padding that we added to work around keras limitations
         conv_crd = Lambda(lambda c: c[0])(coordinates)
         for nb_filters, nb_neighbors in zip(filters, nb_neighbours):
+
+            if nb_neighbors > nb_features:
+                raise Exception("More neighbors than features, " \
+                                "please use less neighbors or use more features")
+
             distances = euclidean_distances(conv_crd)
             conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
             conv_layer = BatchNormalization(axis=1)(conv_layer)
@@ -143,8 +146,10 @@ class PhyloDAP(DeepLearningDAP):
 
     @staticmethod
     def _adjust_dimensions(X, Coord):
-        """Utility method used for input data preparation."""
-        return (np.expand_dims(X, 3), np.expand_dims(Coord, 4))
+        """
+        Utility method used for input data preparation.
+        """
+        return np.expand_dims(X, 3), np.expand_dims(Coord, 4)
 
     def _prepare_data(self, X, training_data=True):
         """
@@ -190,8 +195,7 @@ class PhyloDAP(DeepLearningDAP):
 
 
 def main():
-    """"""
-    os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
+
     datafile = settings.TRAINING_DATA_FILEPATH
     labels_datafile = settings.TRAINING_LABELS_FILEPATH
     coordinates_datafile = settings.COORDINATES_FILEPATH
@@ -203,11 +207,11 @@ def main():
 
     dap = PhyloDAP(inputs, settings.DISEASE)
     trained_model = dap.run(verbose=True)
-
-    # ADD test evaluation
-
     dap.predict_on_test(trained_model, inputs.test_data, inputs.test_targets)
 
+    # This is just because the TensorFlow version that we are using crashes
+    # on completion. The message is just to be sure that the computation was terminated
+    # before the segmentation fault
     print("Computation completed!")
 
 if __name__ == '__main__':

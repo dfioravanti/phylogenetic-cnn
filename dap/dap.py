@@ -1,5 +1,4 @@
-"""Main module implementing Data Analysis Plan
-"""
+"""Main module implementing Data Analysis Plan"""
 
 import os
 import mlpy
@@ -12,8 +11,8 @@ from keras.models import model_from_json
 from . import settings
 from .scaling import get_feature_scaling_name
 from .ranking import get_feature_ranking_name
-from .performance import (npv, ppv, sensitivity, specificity,
-                          KCCC_discrete, dor, accuracy)
+from .metrics import (npv, ppv, sensitivity, specificity,
+                      KCCC_discrete, dor, accuracy)
 from sklearn.metrics import roc_auc_score
 
 from keras.callbacks import ModelCheckpoint
@@ -22,7 +21,14 @@ from abc import ABC, abstractmethod
 
 
 class DAP(ABC):
-    """Data Analysis Plan ABC"""
+    """
+    Abstract Data Analysis Plan
+    
+    Provides a unified framework wherein execute the DAP.
+    This is an abstact class so all all the abstract methods needs to be reimplemented
+    in subclasses in order to work.
+    
+    """
 
     # Metrics Keys
     ACC = 'ACC'
@@ -54,7 +60,6 @@ class DAP(ABC):
 
     def __init__(self, experiment):
         """
-        
         Parameters
         ----------
         experiment: sklearn.dataset.base.Bunch
@@ -187,6 +192,7 @@ class DAP(ABC):
         metrics_shape = (self.iteration_steps, self.feature_steps)
         metrics = {
             self.RANKINGS: np.empty((self.iteration_steps, self.experiment_data.nb_features), dtype=np.int),
+
             self.NPV: np.empty(metrics_shape),
             self.PPV: np.empty(metrics_shape),
             self.SENS: np.empty(metrics_shape),
@@ -195,9 +201,12 @@ class DAP(ABC):
             self.AUC: np.empty(metrics_shape),
             self.ACC: np.empty(metrics_shape),
             self.DOR: np.empty(metrics_shape),
+
             self.PREDS: np.empty(metrics_shape + (self.experiment_data.nb_samples,), dtype=np.int),
 
             # Confidence Interval Metrics-specific
+            # all entry are assumed to have the following structure
+            # (mean, lower_bound, upper_bound)
             self.MCC_CI: np.empty((self.feature_steps, 3)),
             self.ACC_CI: np.empty((self.feature_steps, 3)),
             self.AUC_CI: np.empty((self.feature_steps, 3)),
@@ -245,6 +254,7 @@ class DAP(ABC):
 
         # Compute Base Step Metrics
         iteration_step, feature_step = self._iteration_step_nb, self._feature_step_nb
+
         self.metrics[self.PREDS][iteration_step, feature_step, validation_indices] = predicted_labels
         self.metrics[self.NPV][iteration_step, feature_step] = npv(validation_labels, predicted_labels)
         self.metrics[self.PPV][iteration_step, feature_step] = ppv(validation_labels, predicted_labels)
@@ -330,22 +340,21 @@ class DAP(ABC):
         """
 
         # Compute Confidence Intervals for Metrics
-
-        def _ci_metric(ci_metric_key, metric_key):
+        def _compute_ci_metric(ci_metric_key, metric_key):
             metric_means = np.mean(self.metrics[metric_key], axis=0)
             for step, _ in enumerate(feature_steps):
                 metric_mean = metric_means[step]
                 ci_low, ci_hi = mlpy.bootstrap_ci(self.metrics[metric_key][:, step])
                 self.metrics[ci_metric_key][step] = np.array([metric_mean, ci_low, ci_hi])
 
-        _ci_metric(self.MCC_CI, self.MCC)  # MCC
-        _ci_metric(self.ACC_CI, self.ACC)  # ACC
-        _ci_metric(self.AUC_CI, self.AUC)  # AUC
-        _ci_metric(self.DOR_CI, self.DOR)  # DOR
-        _ci_metric(self.PPV_CI, self.PPV)  # PPV
-        _ci_metric(self.NPV_CI, self.NPV)  # NPV
-        _ci_metric(self.SPEC_CI, self.SPEC)  # SPEC
-        _ci_metric(self.SENS_CI, self.SENS)  # SENS
+        _compute_ci_metric(self.MCC_CI, self.MCC)
+        _compute_ci_metric(self.ACC_CI, self.ACC)
+        _compute_ci_metric(self.AUC_CI, self.AUC)
+        _compute_ci_metric(self.DOR_CI, self.DOR)
+        _compute_ci_metric(self.PPV_CI, self.PPV)
+        _compute_ci_metric(self.NPV_CI, self.NPV)
+        _compute_ci_metric(self.SPEC_CI, self.SPEC)
+        _compute_ci_metric(self.SENS_CI, self.SENS)
 
     @staticmethod
     def _save_metric_to_file(metric_filename, metric, columns=None, index=None):
@@ -952,23 +961,36 @@ class DAP(ABC):
         # Finally return the trained model
         return dap_model
 
-    def predict_on_test(self, model, X_test, Y_test):
-        """"""
+    def predict_on_test(self, best_model, X_test, Y_test):
+        """
+        Execute the last step of the DAP. A prediction using the best model
+        trained in the main loop and the best number of features.
+                
+        Parameters
+        ----------
+        best_model 
+            The best model trained by the run() method
+        X_test
+            Test samples
+        Y_test
+            Test targets
+        """
 
+        # Select the correct features and prepare the data before predict
         feature_ranking = self._best_feature_ranking[:self._nb_features]
-
         X_test = self._select_ranked_features(feature_ranking, X_test)
-        # Prepare data before predict
         X_test = self._prepare_data(X_test)
-        predicted_classes, predicted_class_probs = self._predict(model, X_test)
-        self._compute_test_metrics(Y_test, predicted_classes, predicted_class_probs)
 
-        output_dir = self._get_output_folder()
-        self._save_test_metrics_to_file(output_dir)
+        predicted_classes, predicted_class_probs = self._predict(best_model, X_test)
+
+        self._compute_test_metrics(Y_test, predicted_classes, predicted_class_probs)
+        self._save_test_metrics_to_file(self._get_output_folder())
 
 
 class DeepLearningDAP(DAP):
-    """DAP Specialisation for plans using Deep Neural Network Models as Learning models"""
+    """
+    DAP Specialisation for plans using Deep Neural Network Models as Learning models
+    """
 
     # Neural Network Specific Metric Keys
     NN_VAL_ACC = 'NN_val_acc'
