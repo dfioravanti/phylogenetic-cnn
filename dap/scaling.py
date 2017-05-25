@@ -15,9 +15,9 @@ norm = NORM = Normalizer
 
 
 _REVERSE_NAMES_MAP = {
-    hash(std): 'std',
-    hash(minmax): 'minmax',
-    hash(norm): 'norm'
+    hash(std.__name__): 'std',
+    hash(minmax.__name__): 'minmax',
+    hash(norm.__name__): 'norm'
 }
 
 
@@ -40,4 +40,5 @@ def get_feature_scaling_name(reference):
     str:
         Textual name of scaling method
     """
-    return _REVERSE_NAMES_MAP.get(hash(reference), 'no_name')
+
+    return _REVERSE_NAMES_MAP.get(hash(type(reference).__name__), 'no_name')
