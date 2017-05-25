@@ -819,7 +819,11 @@ class DAP(ABC):
             # Note: self.feature_scaler already stores the reference to scaler object
 
         # 3. Apply Feature Ranking
-        ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
+        if settings.use_borda:
+            ranking, _, _ = mlpy.borda_count(self.metrics[self.RANKINGS])
+        else:
+            ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
+
         self._best_feature_ranking = ranking
         Xs_train_fs = self._select_ranked_features(ranking[:best_nb_features], X_train)
 
@@ -950,7 +954,9 @@ class DAP(ABC):
 
     def predict_on_test(self, model, X_test, Y_test):
         """"""
+
         feature_ranking = self._best_feature_ranking[:self._nb_features]
+
         X_test = self._select_ranked_features(feature_ranking, X_test)
         # Prepare data before predict
         X_test = self._prepare_data(X_test)

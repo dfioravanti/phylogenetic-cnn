@@ -61,6 +61,15 @@ feature_ranges = [5, 25, 50, 75, 100]
 # Include top feature in the feature steps
 use_top_feature = False
 
+# ---------
+# 2.2 BORDA
+# ---------
+
+# Determine the features to use in testing through BORDA
+# ranking instead of using the usual ranking feature procedure
+
+use_borda = True
+
 # =================================================
 # B. Machine Learning Models HyperParameter Section
 # =================================================
