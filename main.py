@@ -16,7 +16,7 @@ from keras.layers import (
 )
 
 import settings
-from data_analysis_plan import DeepLearningDAP
+from dap import DeepLearningDAP
 from phcnn.layers import PhyloConv1D, euclidean_distances
 from utils import get_data, to_list
 
