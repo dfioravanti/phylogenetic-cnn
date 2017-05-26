@@ -15,6 +15,8 @@ from keras.layers import (
     BatchNormalization
 )
 
+from keras import backend as K
+
 import settings
 from dap import DeepLearningDAP
 from phcnn.layers import PhyloConv1D, euclidean_distances
@@ -29,6 +31,8 @@ class PhyloDAP(DeepLearningDAP):
         self._disease_name = target_disease
         self.nb_filters = to_list(settings.nb_convolutional_filters)
         self.phylo_neighbours = to_list(settings.nb_phylo_neighbours)
+
+        self._do_serialisation = False # Serialization does not work with our Keras layer
 
     # ==== Abstract Methods Implementation ====
 
@@ -57,6 +61,10 @@ class PhyloDAP(DeepLearningDAP):
         keras.models.Model
             PhyloCNN model
         """
+
+        # We need this to prevent memory leak from TensorFlow. Please note that the
+        # optimizer is part of the graph so needs to be recreated after this call
+        K.clear_session()
 
         # Parameters for Input Layers
         nb_features = self._nb_features  # current nb of features in the feature step!

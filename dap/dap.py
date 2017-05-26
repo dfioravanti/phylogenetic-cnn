@@ -7,6 +7,7 @@ import pandas as pd
 
 from keras.utils import np_utils
 from keras.models import model_from_json
+from keras.optimizers import Adam, SGD, RMSprop
 
 from . import settings
 from .scaling import get_feature_scaling_name
@@ -1022,7 +1023,7 @@ class DeepLearningDAP(DAP):
             self.extra_fit_params['class_weight'] = settings.class_weight
 
         # Compilation Settings
-        self.optimizer = settings.optimizer
+        self.optimizer_configuration = settings.optimizer_configuration
         self.loss_function = settings.loss
         self.learning_metrics = settings.metrics
         self.loss_weights = settings.loss_weights
@@ -1047,6 +1048,7 @@ class DeepLearningDAP(DAP):
 
         # Note: the value of self._nb_features attribute is updated during the main DAP loop,
         # during each iteration, before this !
+
         cache_key = self._nb_features
         if cache_key in self._model_cache:
             if self._do_serialisation:
@@ -1071,6 +1073,36 @@ class DeepLearningDAP(DAP):
         self.ml_model_ = model
         return self.ml_model_
 
+    def _get_optimizer(self, optimizer_configuration):
+        """
+        
+        Parameters
+        ----------
+        optimizer_configuration: Dict
+            A dictionary of strings where a key is the name of the optimizer and the 
+            rest are configurations values for the selected optimizer
+
+        Returns
+        -------
+
+        optimizer: Keras.Optimizer
+            The selected optimizer correctly configured
+
+        """
+        name = optimizer_configuration['name']
+        config = {k: v for k, v in optimizer_configuration.items() if k != 'name'}
+
+        if name == 'Adam':
+            optimizer = Adam(**config)
+        elif name == 'SGD':
+            optimizer = SGD(**config)
+        elif name == 'RMSprop':
+            optimizer = RMSprop(**config)
+        else:
+            raise Exception('Unsupported optimizer_configuration, you can use only: Adam, SGD, RMSprop')
+
+        return optimizer
+
     def _create_ml_model(self):
         """Instantiate a new Keras Deep Network to be used in the fit-predict step.
         
@@ -1079,6 +1111,8 @@ class DeepLearningDAP(DAP):
         model: keras.models.Model
             The new deep learning Keras model.
         """
+
+        # Reduces tensorflow memory leak
 
         model = self._build_network()
 
@@ -1089,7 +1123,9 @@ class DeepLearningDAP(DAP):
         if self.extra_compile_params:
             extra_compile_params.update(**self.extra_compile_params)
 
-        model.compile(loss=self.loss_function, optimizer=self.optimizer,
+        optimizer = self._get_optimizer(self.optimizer_configuration)
+
+        model.compile(loss=self.loss_function, optimizer=optimizer,
                       metrics=self.learning_metrics, **extra_compile_params)
         return model
 
@@ -1298,6 +1334,7 @@ class DeepLearningDAP(DAP):
         model, extra_metrics = self._fit(model, X_train, y_train,
                                          X_validation=X_validation, y_validation=y_validation)
         predicted_classes, predicted_class_probs = self._predict(model, X_validation)
+
         return predicted_classes, predicted_class_probs, extra_metrics
 
     def _fit(self, model, X_train, y_train, X_validation=None, y_validation=None):
@@ -1362,6 +1399,7 @@ class DeepLearningDAP(DAP):
         extra_metrics = {
             self.HISTORY: model_history
         }
+
         return model, extra_metrics
 
     def _predict(self, model, X_validation, y_validation=None, **kwargs):
