@@ -20,6 +20,8 @@ from sklearn.metrics import roc_auc_score
 from keras.callbacks import ModelCheckpoint
 
 from abc import ABC, abstractmethod
+import pickle
+from types import ModuleType
 
 
 class DAP(ABC):
@@ -489,6 +491,28 @@ class DAP(ABC):
         """
         Method to be implemented in case that extra operations are needed at the end of
         every experiment. by default, no extra operations are needed
+        """
+        pass
+
+    def save_configuration(self):
+        """
+        Method that saves the configuration of the dap as a pickle. If more configuration
+        need to be saved this can be done reimplementing the _save_extra_configuration method
+        """
+        settings_conf = dict()
+        for key, value in settings.__dict__.items():
+            if not key.startswith('__') and not isinstance(value, ModuleType):
+                settings_conf.update({key: value})
+        path = os.path.join(self._get_output_folder(), 'dap_settings.pickle')
+        with open(path, "wb") as f:
+            pickle.dump(obj=settings_conf, file=f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        self._save_extra_configuration()
+
+    def _save_extra_configuration(self):
+        """
+        Method to be implemented in case that extra configurations must be saved. 
+        By default, no extra configurations are saved.
         """
         pass
 
@@ -968,6 +992,9 @@ class DAP(ABC):
         dap_model, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
         if extra_metrics:
             self._compute_extra_step_metrics(extra_metrics)
+
+        # save the configuration on file
+
 
         # Finally return the trained model
         return dap_model

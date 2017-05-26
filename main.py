@@ -15,7 +15,8 @@ from keras.layers import (
     BatchNormalization
 )
 
-from keras import backend as K
+import pickle
+from types import ModuleType
 
 import settings
 from dap import DeepLearningDAP
@@ -199,6 +200,15 @@ class PhyloDAP(DeepLearningDAP):
                             "have the same length. Check the config file")
         return super(PhyloDAP, self).run(verbose)
 
+    def _save_extra_configuration(self):
+        settings_conf = dict()
+        for key, value in settings.__dict__.items():
+            if not key.startswith('__') and not isinstance(value, ModuleType):
+                settings_conf.update({key: value})
+        path = os.path.join(self._get_output_folder(), 'phylodap_settings.pickle')
+        with open(path, "wb") as f:
+            pickle.dump(obj=settings_conf, file=f, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 def main():
 
@@ -212,6 +222,7 @@ def main():
                       test_datafile, test_label_datafile)
 
     dap = PhyloDAP(inputs, settings.DISEASE)
+    dap.save_configuration()
     trained_model = dap.run(verbose=True)
     dap.predict_on_test(trained_model, inputs.test_data, inputs.test_targets)
 
