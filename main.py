@@ -70,8 +70,8 @@ class PhyloDAP(DeepLearningDAP):
         nb_coordinates = self.experiment_data.nb_coordinates
 
         # Paramenters for phylo_conv layers
-        filters = self.nb_filters
-        nb_neighbours = self.phylo_neighbours
+        list_filters = self.nb_filters
+        list_neighbours = self.phylo_neighbours
 
         # Parameter for output layer
         nb_classes = self.experiment_data.nb_classes
@@ -84,14 +84,17 @@ class PhyloDAP(DeepLearningDAP):
 
         # We remove the padding that we added to work around keras limitations
         conv_crd = Lambda(lambda c: c[0])(coordinates)
-        for nb_filters, nb_neighbors in zip(filters, nb_neighbours):
 
-            if nb_neighbors > nb_features:
-                raise Exception("More neighbors than features, " \
-                                "please use less neighbors or use more features")
+        for filters, neighbours in zip(list_filters, list_neighbours):
+            for nb_filters, nb_neighbors in zip(filters, neighbours):
 
-            distances = euclidean_distances(conv_crd)
-            conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
+                if nb_neighbors > nb_features:
+                    raise Exception("More neighbors than features, " \
+                                    "please use less neighbors or use more features")
+
+                distances = euclidean_distances(conv_crd)
+                conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
+
             conv_layer = BatchNormalization(axis=1)(conv_layer)
             conv_layer = Dropout(0.25, seed=np.random.seed())(conv_layer)
 

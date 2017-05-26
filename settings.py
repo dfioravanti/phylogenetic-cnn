@@ -19,7 +19,7 @@ TYPE_DATA = 'synthetic_data'
 
 # This can be empty, if so the datasets will be located in HD_DISEASE/
 # instead of HD_DISEASE/NB_SAMPLES
-NB_SAMPLES = '300'
+NB_SAMPLES = '1000'
 
 TRAINING_DATA_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, ''.join(['HS_', DISEASE]), NB_SAMPLES,
                                       ''.join(['Sokol_16S_taxa_HS_', DISEASE, '_commsamp_training.txt']))
@@ -38,11 +38,13 @@ TEST_LABELS_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, ''.join(['HS_',DISEASE]
 # ==================================
 
 # No. of Convolutional Filters to use.
-# Note: This could be either a number (scalar) or a list. If scalar, the **same** number will
-# be used for all the PhyloConv Layers
-nb_convolutional_filters = [8, 8, 16]
+# This should be a list of lists, a list is a phylo-convolutional block followed by a dropout
+# for example [8, 16, 32] will generate a
+# phyloconv1D with 8 filters -> phyloconv1D with 16 filters -> phyloconv1D with 32 filters -> dropout
+# any new block will attached to the previous one.
+nb_convolutional_filters = [[32, 64], [64, 128]]
 
 # No. of Neighbours
-# Note: This could be either a number (scalar) or a list. If scalar, the **same** number will
-# be used for all the PhyloConv Layers
-nb_phylo_neighbours = [4, 4, 4]  # No. Neighbours
+# The structures should be the same as nb_convolutional_filters any number represents the number of
+# neighbours for that phyloconv1D
+nb_phylo_neighbours = [[4, 4], [8, 8]]
