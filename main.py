@@ -29,6 +29,8 @@ class PhyloDAP(DeepLearningDAP):
     def __init__(self, experiment, target_disease):
         super(PhyloDAP, self).__init__(experiment=experiment)
         self._disease_name = target_disease
+        self.type_data = settings.TYPE_DATA
+        self.total_nb_samples = settings.NB_SAMPLES
         self.nb_filters = to_list(settings.nb_convolutional_filters)
         self.phylo_neighbours = to_list(settings.nb_phylo_neighbours)
 
@@ -45,7 +47,7 @@ class PhyloDAP(DeepLearningDAP):
         Compose path to the folder where reports and metrics will be saved.
         """
         base_filename = self._disease_name.lower()
-        folder_name = '_'.join([base_filename, self.ml_model_name,
+        folder_name = '_'.join([base_filename, self.type_data, self.total_nb_samples, self.ml_model_name,
                                 self.feature_scaling_name, self.feature_ranking_name,
                                 str(self.cv_n), str(self.cv_k)])
         output_folder_path = os.path.join(settings.OUTPUT_DIR, folder_name)
@@ -61,10 +63,6 @@ class PhyloDAP(DeepLearningDAP):
         keras.models.Model
             PhyloCNN model
         """
-
-        # We need this to prevent memory leak from TensorFlow. Please note that the
-        # optimizer is part of the graph so needs to be recreated after this call
-        K.clear_session()
 
         # Parameters for Input Layers
         nb_features = self._nb_features  # current nb of features in the feature step!
@@ -224,4 +222,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

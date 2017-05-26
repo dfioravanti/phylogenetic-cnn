@@ -8,6 +8,7 @@ import pandas as pd
 from keras.utils import np_utils
 from keras.models import model_from_json
 from keras.optimizers import Adam, SGD, RMSprop
+from keras import backend as K
 
 from . import settings
 from .scaling import get_feature_scaling_name
@@ -484,6 +485,13 @@ class DAP(ABC):
 
         return k_features_indices
 
+    def _extra_operations_experiment(self):
+        """
+        Method to be implemented in case that extra operations are needed at the end of
+        every experiment. by default, no extra operations are needed
+        """
+        pass
+
     # ====== DAP Ops Methods ======
     #
     def _train_validation_split(self, training_indices, validation_indices):
@@ -944,6 +952,8 @@ class DAP(ABC):
                         print("MCC: {}".format(
                             self.metrics[self.MCC][self._iteration_step_nb, self._feature_step_nb]))
 
+            self._extra_operations_experiment()
+
         # Compute Confidence Intervals for all target metrics
         self._compute_metrics_confidence_intervals(k_features_indices)
         # Save All Metrics to File
@@ -1073,8 +1083,19 @@ class DeepLearningDAP(DAP):
         self.ml_model_ = model
         return self.ml_model_
 
+    def _extra_operations_experiment(self):
+        """
+        Method that resets the Keras session at every experiment.
+        We need this in order to reduce the memory leak from tensorflow.
+        Please note that the optimizer is part of the graph so needs to 
+        be recreated after this call.
+        """
+
+        K.clear_session()
+
     def _get_optimizer(self, optimizer_configuration):
         """
+        Method that returns a Keras optimizer given a configuration
         
         Parameters
         ----------

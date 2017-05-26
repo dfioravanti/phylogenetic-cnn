@@ -97,7 +97,7 @@ epochs = 200
 batch_size = 32
 
 # Verbosity level of `fit` method
-fit_verbose = 2
+fit_verbose = 0
 
 # Validation split
 # ----------------
