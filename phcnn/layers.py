@@ -6,6 +6,7 @@ from keras.layers.convolutional import Conv1D
 
 from keras import backend as K
 import tensorflow as tf
+from theano import tensor as T
 
 
 def _transpose_on_first_two_axes(X):
@@ -135,48 +136,25 @@ def _gather_target_neighbors(data, indices):
         Tensor of shape (batch_size, nb_features * nb_neighbors, filters)
     
     """
-    # TODO: FIX This function
-    # TODO: Decide what to do with this stuff
-    # features = indices.shape[0].value
-    # nb = indices.shape[1].value
-    #
-    # permuted = K.permute_dimensions(data, [1, 2, 0])
-    #
-    # tiled = K.tile(permuted, [nb, 1, 1])
-    # shapes = (features, nb, tiled.shape[1].value, tiled.shape[2].value)
-    # shapes = [s if s else -1 for s in shapes]
-    # resh = K.reshape(tiled, shapes)
-    #
-    # if K.backend() == 'theano':
-    #     g = K.gather(resh, indices)
-    # else:
-    #     g = tf.gather_nd(resh, indices)
-    #
-    # return g
+    indices_shape = K.int_shape(indices)
+    data_shape = K.int_shape(data)
+    nb_samples = int(data_shape[0]) if data_shape[0] else -1
+    nb_features = int(indices_shape[0])
+    nb_neighbours = int(indices_shape[1])
+    nb_channels = int(data_shape[2])
 
-    # if not axis:
-    #     return tf.gather(data, indices)
-    # rank = data.shape.ndims
-    # perm = [0, 1, 2]
-    # temp = tf.gather_nd(tf.transpose(data, perm), indices)
-    # output = tf.transpose(temp, perm)
-    # return output
-
-    perm = [1, 0]
-
-    output = K.gather(K.permute_dimensions(data[:, :, 0], perm), indices[:, :, 0])
-    shapes = [s.value if s.value else -1 for s in output.shape]
-    shapes = tuple([shapes[0] * shapes[1]] + [shapes[2], 1])
-    output = K.reshape(output, shapes)
-    for i in range(1, data.shape[2].value):
-        gather = K.gather(K.permute_dimensions(data[:, :, i], perm), indices[:, :, i])
-        shapes = [s.value if s.value else -1 for s in gather.shape]
-        shapes = tuple([shapes[0] * shapes[1]] + [shapes[2], 1])
-        gather = K.reshape(gather, shapes)
-        output = K.concatenate([output, gather])
-
-    out = K.permute_dimensions(output, [1, 0, 2])
-    return out
+    if K.backend() == 'tensorflow':
+        perm = [1, 2, 0]
+        data_nd = K.permute_dimensions(data, perm)
+        gather_neighbours = tf.gather_nd(data_nd, indices)
+        target_neighbours = K.reshape(gather_neighbours, shape=(nb_features * nb_neighbours,
+                                                                nb_channels, nb_samples))
+        target_neighbours = K.permute_dimensions(target_neighbours, [2, 0, 1])
+    else:
+        target_neighbours = data[:, indices]  # ?, 13, 2, 1, 1
+        target_neighbours = K.reshape(target_neighbours, shape=(nb_samples,
+                                                                nb_features * nb_neighbours, nb_channels))
+    return target_neighbours
 
 
 def _top_k(dist, k):
@@ -199,10 +177,16 @@ def _top_k(dist, k):
 
     """
 
-    swap_first_second_axes = [0, 2, 1]
-
-    _, index = tf.nn.top_k(K.permute_dimensions(dist, swap_first_second_axes), k=k)
-    out = K.permute_dimensions(index, swap_first_second_axes)
+    dist_shape = dist._keras_shape
+    if K.backend() == 'tensorflow':
+        swap_first_second_axes = [0, 2, 1]
+        _, index = tf.nn.top_k(K.permute_dimensions(-dist, swap_first_second_axes), k=k)
+        out = K.permute_dimensions(index, swap_first_second_axes)
+        out._keras_shape = (dist_shape[1], k, dist_shape[2])
+    else:  # Theano
+        index = T.argsort(dist, axis=1)
+        out = index[:, :k, :]
+    out._keras_shape = (dist_shape[1], k, dist_shape[2])
     return out
 
 
@@ -318,7 +302,7 @@ class PhyloConv1D(Conv1D):
 
         # Phylo neighbors step
         neighbor_indexes = _top_k(-self.distances, k=self.nb_neighbors)
-        target_neighbors = neighbor_indexes[0: self.nb_features, 0:self.nb_neighbors, :]
+        target_neighbors = neighbor_indexes[0:self.nb_features, 0:self.nb_neighbors, :]
         X_phylongb = _gather_target_neighbors(X, target_neighbors)
         Coord_phylongb = _gather_target_neighbors(Coord, target_neighbors)
 
@@ -338,7 +322,6 @@ class PhyloConv1D(Conv1D):
         """
 
         input_shape_X, input_shape_C = input_shape[0], input_shape[1]
-
         X_shape = (input_shape_X[0],
                    input_shape_X[1] * self.nb_neighbors,
                    input_shape_X[2])
