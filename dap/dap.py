@@ -7,6 +7,7 @@ import pandas as pd
 
 from keras.utils import np_utils
 from keras.models import model_from_json
+from sklearn.model_selection import train_test_split
 from keras import backend as K
 
 from . import settings
@@ -199,7 +200,6 @@ class DAP(ABC):
     def _set_test_data(self):
         self.X_test = self.experiment_data.test_data
         self.y_test = self.experiment_data.test_targets
-
 
     def _prepare_metrics_array(self):
         """
@@ -867,13 +867,12 @@ class DAP(ABC):
         self._feature_step_nb = self.cv_n + 1  # flag value indicating last step
 
         # Set Training data
-        X_train = self.X
-        y_train = self.y
+        X_train, X_val, y_train, y_val = train_test_split(self.X, self.y,
+                                                          test_size=0.2, random_state=np.random.seed())
 
         # 2.1 Apply Feature Scaling (if needed)
         if self.apply_feature_scaling:
-            X_train = self.feature_scaler.fit_transform(X_train)
-            # Note: self.feature_scaler already stores the reference to scaler object
+            X_train, X_val = self._apply_scaling(X_train, X_val)
 
         # 3. Apply Feature Ranking
         if settings.use_borda:
@@ -882,15 +881,17 @@ class DAP(ABC):
             ranking = self._apply_feature_ranking(X_train, y_train, seed=seed)
 
         self._best_feature_ranking = ranking
-        Xs_train_fs = self._select_ranked_features(ranking[:best_nb_features], X_train)
+        Xs_train_fs, Xs_val_fs = self._select_ranked_features(ranking[:best_nb_features], X_train, X_val)
 
         # 4. Fit the model
         model = self.ml_model
         # 4.1 Prepare data
         Xs_train_fs = self._prepare_data(Xs_train_fs)
+        Xs_val_fs = self._prepare_data(Xs_val_fs)
         y_train = self._prepare_targets(y_train)
+        y_val = self._prepare_targets(y_val)
 
-        model, extra_metrics = self._fit(model, Xs_train_fs, y_train)
+        model, extra_metrics = self._fit(model, Xs_train_fs, y_train, Xs_val_fs, y_val)
 
         return model, extra_metrics
 

@@ -114,7 +114,7 @@ class PhyloDAP(DeepLearningDAP):
         self.C = self.experiment_data.coordinates
 
     def _set_test_data(self):
-        super(PhyloDAP, self)._set_training_data()
+        super(PhyloDAP, self)._set_test_data()
         self.C = self.experiment_data.coordinates
 
     def _select_ranked_features(self, ranked_feature_indices, X_train, X_validation=None):
