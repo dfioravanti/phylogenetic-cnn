@@ -11,8 +11,6 @@ from keras.optimizers import Adam, SGD, RMSprop
 from keras import backend as K
 
 from . import settings
-from .scaling import get_feature_scaling_name
-from .ranking import get_feature_ranking_name
 from .metrics import (npv, ppv, sensitivity, specificity,
                       KCCC_discrete, dor, accuracy)
 from sklearn.metrics import roc_auc_score
@@ -20,8 +18,8 @@ from sklearn.metrics import roc_auc_score
 from keras.callbacks import ModelCheckpoint
 
 from abc import ABC, abstractmethod
+from inspect import isclass, isfunction, ismethod
 import pickle
-from types import ModuleType
 
 
 class DAP(ABC):
@@ -29,7 +27,7 @@ class DAP(ABC):
     Abstract Data Analysis Plan
     
     Provides a unified framework wherein execute the DAP.
-    This is an abstact class so all all the abstract methods needs to be reimplemented
+    This is an abstract class so all all the abstract methods needs to be reimplemented
     in subclasses in order to work.
     
     """
@@ -60,7 +58,7 @@ class DAP(ABC):
 
     CI_METRICS = [MCC_CI, SPEC_CI, SENS_CI, DOR_CI, ACC_CI, AUC_CI, PPV_CI, NPV_CI]
 
-    TEST = 'TEST'
+    TEST_SET = 'TEST_SET'
 
     def __init__(self, experiment):
         """
@@ -137,15 +135,27 @@ class DAP(ABC):
 
     @property
     def feature_scaling_name(self):
-        if isinstance(self.feature_scaler, str):
-            return self.feature_scaler
-        return get_feature_scaling_name(self.feature_scaler)
+        return self._get_label(self.feature_scaler)
 
     @property
     def feature_ranking_name(self):
-        if isinstance(self.feature_ranker, str):
-            return self.feature_ranker
-        return get_feature_ranking_name(self.feature_ranker)
+        return self._get_label(self.feature_ranker)
+
+    def _get_label(self, attribute):
+        """Generate a (lowercase) label referring to the provided
+         attribute object. This method is used in all class properties
+         requiring to return the name of specific methods used in DAP steps,
+         most likely to be included in reports and logs.
+        """
+        if isinstance(attribute, str):
+            name = attribute
+        elif isclass(attribute) or isfunction(attribute):
+            name = attribute.__name__
+        elif ismethod(attribute):
+            name = attribute.__qualname__
+        else:
+            name = attribute.__class__.__name__
+        return name.lower()
 
     # ====== Abstract Methods ======
     #
@@ -222,7 +232,7 @@ class DAP(ABC):
 
             # Test dictionary
 
-            self.TEST: dict()
+            self.TEST_SET: dict()
         }
         # Initialize to Flag Values
         metrics[self.PREDS][:, :, :] = -10
@@ -310,15 +320,15 @@ class DAP(ABC):
             This list will be processed separately from standard "base" metrics.
         """
 
-        self.metrics[self.TEST][self.PREDS] = predicted_labels
-        self.metrics[self.TEST][self.NPV] = npv(test_labels, predicted_labels)
-        self.metrics[self.TEST][self.PPV] = ppv(test_labels, predicted_labels)
-        self.metrics[self.TEST][self.SENS] = sensitivity(test_labels, predicted_labels)
-        self.metrics[self.TEST][self.SPEC] = specificity(test_labels, predicted_labels)
-        self.metrics[self.TEST][self.MCC] = KCCC_discrete(test_labels, predicted_labels)
-        self.metrics[self.TEST][self.AUC] = roc_auc_score(test_labels, predicted_labels)
-        self.metrics[self.TEST][self.DOR] = dor(test_labels, predicted_labels)
-        self.metrics[self.TEST][self.ACC] = accuracy(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.PREDS] = predicted_labels
+        self.metrics[self.TEST_SET][self.NPV] = npv(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.PPV] = ppv(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.SENS] = sensitivity(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.SPEC] = specificity(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.MCC] = KCCC_discrete(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.AUC] = roc_auc_score(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.DOR] = dor(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.ACC] = accuracy(test_labels, predicted_labels)
 
         if extra_metrics:
             self._compute_extra_test_metrics(test_labels, predicted_labels,
@@ -447,9 +457,9 @@ class DAP(ABC):
         """
 
         column_name = []
-        self.metrics[self.TEST].pop(self.PREDS)
-        test_metrics = np.zeros((1, len(self.metrics[self.TEST].keys())))
-        for i, item in enumerate(self.metrics[self.TEST].items()):
+        self.metrics[self.TEST_SET].pop(self.PREDS)
+        test_metrics = np.zeros((1, len(self.metrics[self.TEST_SET].keys())))
+        for i, item in enumerate(self.metrics[self.TEST_SET].items()):
             key, value = item
             test_metrics[0, i] = value
             column_name.append(key)
@@ -499,14 +509,13 @@ class DAP(ABC):
         Method that saves the configuration of the dap as a pickle. If more configuration
         need to be saved this can be done reimplementing the _save_extra_configuration method
         """
-        settings_conf = dict()
-        for key, value in settings.__dict__.items():
-            if not key.startswith('__') and not isinstance(value, ModuleType):
-                settings_conf.update({key: value})
-        path = os.path.join(self._get_output_folder(), 'dap_settings.pickle')
-        with open(path, "wb") as f:
-            pickle.dump(obj=settings_conf, file=f, protocol=pickle.HIGHEST_PROTOCOL)
 
+        settings_directives = dir(settings)
+        settings_conf = {key: getattr(settings, key) for key in settings_directives if not key.startswith('__')}
+        dump_filepath = os.path.join(self._get_output_folder(), 'dap_settings.pickle')
+        with open(dump_filepath, "wb") as dump_file:
+            pickle.dumps(settings_conf)
+            pickle.dump(obj=settings_conf, file=dump_file, protocol=pickle.HIGHEST_PROTOCOL)
         self._save_extra_configuration()
 
     def _save_extra_configuration(self):
@@ -1061,6 +1070,7 @@ class DeepLearningDAP(DAP):
 
         # Compilation Settings
         self.optimizer_configuration = settings.optimizer_configuration
+        self.optimizer = settings.optimizer
         self.loss_function = settings.loss
         self.learning_metrics = settings.metrics
         self.loss_weights = settings.loss_weights
@@ -1112,12 +1122,11 @@ class DeepLearningDAP(DAP):
 
     def _extra_operations_experiment(self):
         """
-        Method that resets the Keras session at every experiment.
+        Method that resets the Keras session at the end of each experiment.
         We need this in order to reduce the memory leak from tensorflow.
         Please note that the optimizer is part of the graph so needs to 
         be recreated after this call.
         """
-
         K.clear_session()
 
     def _get_optimizer(self, optimizer_configuration):
@@ -1137,19 +1146,12 @@ class DeepLearningDAP(DAP):
             The selected optimizer correctly configured
 
         """
-        name = optimizer_configuration['name']
-        config = {k: v for k, v in optimizer_configuration.items() if k != 'name'}
-
-        if name == 'Adam':
-            optimizer = Adam(**config)
-        elif name == 'SGD':
-            optimizer = SGD(**config)
-        elif name == 'RMSprop':
-            optimizer = RMSprop(**config)
-        else:
-            raise Exception('Unsupported optimizer_configuration, you can use only: Adam, SGD, RMSprop')
-
-        return optimizer
+        optimizer = self.optimizer
+        if isinstance(optimizer, str):
+            return optimizer
+        optimizer_config = self.optimizer.get_config()
+        optimizer_cls = self.optimizer.__class__
+        return optimizer_cls(**optimizer_config)
 
     def _create_ml_model(self):
         """Instantiate a new Keras Deep Network to be used in the fit-predict step.
@@ -1172,7 +1174,6 @@ class DeepLearningDAP(DAP):
             extra_compile_params.update(**self.extra_compile_params)
 
         optimizer = self._get_optimizer(self.optimizer_configuration)
-
         model.compile(loss=self.loss_function, optimizer=optimizer,
                       metrics=self.learning_metrics, **extra_compile_params)
         return model
@@ -1292,7 +1293,7 @@ class DeepLearningDAP(DAP):
                         values[:len(metric_values)] = metric_values
                     else:
                         values = np.array(metric_values)
-                    self.metrics[self.TEST][metric_name] = values
+                    self.metrics[self.TEST_SET][metric_name] = values
 
     def _save_all_metrics_to_file(self, base_output_folder_path, feature_steps, feature_names, sample_names):
         """
