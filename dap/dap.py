@@ -456,16 +456,18 @@ class DAP(ABC):
 
         """
 
-        column_name = []
+        self._save_metric_to_file(os.path.join(base_output_folder_path, 'test_PRED.txt'),
+                                  self.metrics[self.TEST_SET][self.PREDS], columns=['prediction'])
+
+        column_names = []
         self.metrics[self.TEST_SET].pop(self.PREDS)
         test_metrics = np.zeros((1, len(self.metrics[self.TEST_SET].keys())))
         for i, item in enumerate(self.metrics[self.TEST_SET].items()):
             key, value = item
             test_metrics[0, i] = value
-            column_name.append(key)
-
+            column_names.append(key)
         self._save_metric_to_file(os.path.join(base_output_folder_path, 'metric_test.txt'),
-                                  test_metrics, column_name)
+                                  test_metrics, column_names)
 
     @staticmethod
     def _generate_feature_steps(nb_features):
@@ -1001,9 +1003,6 @@ class DAP(ABC):
         dap_model, extra_metrics = self._train_best_model(k_features_indices, seed=self.cv_n + 1)
         if extra_metrics:
             self._compute_extra_step_metrics(extra_metrics)
-
-        # save the configuration on file
-
 
         # Finally return the trained model
         return dap_model
