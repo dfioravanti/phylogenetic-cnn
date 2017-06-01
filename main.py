@@ -6,20 +6,13 @@ import os
 import numpy as np
 from keras.backend import floatx
 from keras.engine import Input, Model
-from keras.layers import (
-    Lambda,
-    MaxPooling1D,
-    Flatten,
-    Dropout,
-    Dense,
-    BatchNormalization
-)
+from keras.layers import (Lambda, MaxPooling1D, Flatten,
+                          Dropout, Dense, BatchNormalization)
 
 import pickle
-from types import ModuleType
-
 import settings
 from dap import DeepLearningDAP
+from dap import settings as dap_settings
 from phcnn.layers import PhyloConv1D, euclidean_distances
 from utils import get_data, to_list
 
@@ -83,17 +76,16 @@ class PhyloDAP(DeepLearningDAP):
         conv_layer = data
 
         # We remove the padding that we added to work around keras limitations
-        conv_crd = Lambda(lambda c: c[0])(coordinates)
+        conv_crd = Lambda(lambda c: c[0], output_shape=lambda s: (s[1:]))(coordinates)
 
-        for filters, neighbours in zip(list_filters, list_neighbours):
-            for nb_filters, nb_neighbors in zip(filters, neighbours):
+        for nb_filters, nb_neighbors in zip(self.nb_filters, self.phylo_neighbours):
 
-                if nb_neighbors > nb_features:
-                    raise Exception("More neighbors than features, " \
-                                    "please use less neighbors or use more features")
+            if nb_neighbors > nb_features:
+                raise Exception("More neighbors than features, " \
+                                "please use less neighbors or use more features")
 
-                distances = euclidean_distances(conv_crd)
-                conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
+            distances = euclidean_distances(conv_crd)
+            conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
 
             conv_layer = BatchNormalization(axis=1)(conv_layer)
             conv_layer = Dropout(0.25, seed=np.random.seed())(conv_layer)
@@ -204,13 +196,12 @@ class PhyloDAP(DeepLearningDAP):
         return super(PhyloDAP, self).run(verbose)
 
     def _save_extra_configuration(self):
-        settings_conf = dict()
-        for key, value in settings.__dict__.items():
-            if not key.startswith('__') and not isinstance(value, ModuleType):
-                settings_conf.update({key: value})
-        path = os.path.join(self._get_output_folder(), 'phylodap_settings.pickle')
-        with open(path, "wb") as f:
-            pickle.dump(obj=settings_conf, file=f, protocol=pickle.HIGHEST_PROTOCOL)
+        """Add extra steps to also store specific settings related to data file paths and directives."""
+        settings_directives = dir(settings)
+        settings_conf = {key: getattr(settings, key) for key in settings_directives if not key.startswith('__')}
+        dump_filepath = os.path.join(self._get_output_folder(), 'phylodap_settings.pickle')
+        with open(dump_filepath, "wb") as dump_file:
+            pickle.dump(obj=settings_conf, file=dump_file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def main():
@@ -225,7 +216,7 @@ def main():
                       test_datafile, test_label_datafile)
 
     dap = PhyloDAP(inputs, settings.DISEASE)
-    dap.save_configuration()
+    # dap.save_configuration()
     trained_model = dap.run(verbose=True)
     dap.predict_on_test(trained_model, inputs.test_data, inputs.test_targets)
 
