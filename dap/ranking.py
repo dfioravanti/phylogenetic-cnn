@@ -98,33 +98,3 @@ def kbest_ranking(X_train, y_train, seed=None):
 
 # Aliases for settings
 kbest = KBEST = kbest_ranking
-
-
-_REVERSE_NAMES_MAP = {
-    hash(random): 'random',
-    hash(relief): 'relief',
-    hash(kbest): 'kbest'
-}
-
-
-def get_feature_ranking_name(reference):
-    """Returns a textual representation of 
-    selected feature ranking method, provided
-    in input as reference. This backward mapping
-    function is mainly used whenever it is
-    required to have a string representation
-    of a class or a function to generate file names
-    or to printout logs.
-    
-    Parameters
-    ----------
-    reference: object (i.e. function or class)
-        Reference to the feature ranking method 
-        selected in settings.
-        
-    Returns
-    -------
-    str:
-        Textual name of ranking method
-    """
-    return _REVERSE_NAMES_MAP.get(hash(reference), 'no_name')
