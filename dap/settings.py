@@ -56,7 +56,8 @@ feature_ranker = kbest_ranking
 # of features to consider when generating feature steps
 
 # Default: 5%, 25%, 50%, 75%, 100% (all)
-feature_ranges = [5, 25, 50, 75, 100]
+# feature_ranges = [5, 25, 50, 75, 100]
+feature_ranges = [25, 50, 75, 100]
 
 # Include top feature in the feature steps
 use_top_feature = False
@@ -97,7 +98,7 @@ epochs = 200
 batch_size = 32
 
 # Verbosity level of `fit` method
-fit_verbose = 0
+fit_verbose = 1
 
 # Validation split
 # ----------------
@@ -192,3 +193,9 @@ optimizer_configuration = {
     'beta_1': 0.9,
     'beta_2': 0.999
 }
+
+# This can either be a string or an
+# optimizer object (see keras.optimizers)
+from keras.optimizers import Adam
+optimizer = Adam(lr=0.001, decay=1e-06,
+                 epsilon=1e-08, beta_1=0.9, beta_2 = 0.999)
