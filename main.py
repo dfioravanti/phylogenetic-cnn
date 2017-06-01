@@ -12,7 +12,6 @@ from keras.layers import (Lambda, MaxPooling1D, Flatten,
 import pickle
 import settings
 from dap import DeepLearningDAP
-from dap import settings as dap_settings
 from phcnn.layers import PhyloConv1D, euclidean_distances
 from utils import get_data, to_list
 
@@ -111,6 +110,10 @@ class PhyloDAP(DeepLearningDAP):
         """
         Add set of coordinates to default training data
         """
+        super(PhyloDAP, self)._set_training_data()
+        self.C = self.experiment_data.coordinates
+
+    def _set_test_data(self):
         super(PhyloDAP, self)._set_training_data()
         self.C = self.experiment_data.coordinates
 
@@ -218,7 +221,7 @@ def main():
     dap = PhyloDAP(inputs, settings.DISEASE)
     # dap.save_configuration()
     trained_model = dap.run(verbose=True)
-    dap.predict_on_test(trained_model, inputs.test_data, inputs.test_targets)
+    dap.predict_on_test(trained_model)
 
     # This is just because the TensorFlow version that we are using crashes
     # on completion. The message is just to be sure that the computation was terminated

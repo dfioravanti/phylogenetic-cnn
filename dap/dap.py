@@ -7,7 +7,6 @@ import pandas as pd
 
 from keras.utils import np_utils
 from keras.models import model_from_json
-from keras.optimizers import Adam, SGD, RMSprop
 from keras import backend as K
 
 from . import settings
@@ -196,6 +195,11 @@ class DAP(ABC):
         """
         self.X = self.experiment_data.training_data
         self.y = self.experiment_data.targets
+
+    def _set_test_data(self):
+        self.X_test = self.experiment_data.test_data
+        self.y_test = self.experiment_data.test_targets
+
 
     def _prepare_metrics_array(self):
         """
@@ -1007,7 +1011,7 @@ class DAP(ABC):
         # Finally return the trained model
         return dap_model
 
-    def predict_on_test(self, best_model, X_test, Y_test):
+    def predict_on_test(self, best_model):
         """
         Execute the last step of the DAP. A prediction using the best model
         trained in the main loop and the best number of features.
@@ -1021,13 +1025,20 @@ class DAP(ABC):
         Y_test
             Test targets
         """
+        self._set_test_data()
+        X_test = self.X_test
+        Y_test = self.y_test
 
         # Select the correct features and prepare the data before predict
         feature_ranking = self._best_feature_ranking[:self._nb_features]
         X_test = self._select_ranked_features(feature_ranking, X_test)
         X_test = self._prepare_data(X_test)
+        Y = self._prepare_targets(Y_test)
 
         predicted_classes, predicted_class_probs = self._predict(best_model, X_test)
+
+        print(best_model.metrics_names)
+        print(best_model.evaluate(X_test, Y))
 
         self._compute_test_metrics(Y_test, predicted_classes, predicted_class_probs)
         self._save_test_metrics_to_file(self._get_output_folder())
