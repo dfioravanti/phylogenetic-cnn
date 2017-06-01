@@ -100,12 +100,13 @@ def euclidean_distances(X):
     YY = _transpose_on_first_two_axes(XX)
 
     distance = _dot(X, Y)
+    distance_shapes = K.int_shape(distance)
     distance *= -2
     distance += XX
     distance += YY
     distance = K.maximum(distance,
                          K.constant(0, dtype=distance.dtype))
-
+    distance._keras_shape = distance_shapes
     return distance
 
 
@@ -146,14 +147,17 @@ def _gather_target_neighbors(data, indices):
     if K.backend() == 'tensorflow':
         perm = [1, 2, 0]
         data_nd = K.permute_dimensions(data, perm)
+        indices = K.expand_dims(indices, 3)
         gather_neighbours = tf.gather_nd(data_nd, indices)
-        target_neighbours = K.reshape(gather_neighbours, shape=(nb_features * nb_neighbours,
+        gather_neighbours = gather_neighbours[:, :, :, 0]
+        target_neighbours = K.reshape(gather_neighbours, shape=(nb_features*nb_neighbours,
                                                                 nb_channels, nb_samples))
         target_neighbours = K.permute_dimensions(target_neighbours, [2, 0, 1])
     else:
-        target_neighbours = data[:, indices]  # ?, 13, 2, 1, 1
+        target_neighbours = data[:, indices]
+        target_neighbours = target_neighbours[:, :, :, 0]
         target_neighbours = K.reshape(target_neighbours, shape=(nb_samples,
-                                                                nb_features * nb_neighbours, nb_channels))
+                                                                nb_features*nb_neighbours, nb_channels))
     return target_neighbours
 
 
@@ -176,13 +180,12 @@ def _top_k(dist, k):
         Tensor of shape (nb_features, nb_neighbors, filters)
 
     """
-
-    dist_shape = dist._keras_shape
+    # TODO: Update Documentation
+    dist_shape = K.int_shape(dist)
     if K.backend() == 'tensorflow':
         swap_first_second_axes = [0, 2, 1]
         _, index = tf.nn.top_k(K.permute_dimensions(-dist, swap_first_second_axes), k=k)
         out = K.permute_dimensions(index, swap_first_second_axes)
-        out._keras_shape = (dist_shape[1], k, dist_shape[2])
     else:  # Theano
         index = T.argsort(dist, axis=1)
         out = index[:, :k, :]
@@ -248,7 +251,7 @@ class PhyloConv1D(Conv1D):
                  **kwargs):
 
         self.nb_neighbors = nb_neighbors
-        self.nb_features = distances.shape[0].value
+        self.nb_features = K.int_shape(distances)[0]
         self.distances = distances
 
         super(PhyloConv1D, self).__init__(
@@ -301,10 +304,12 @@ class PhyloConv1D(Conv1D):
         Coord = inputs[1]
 
         # Phylo neighbors step
-        neighbor_indexes = _top_k(-self.distances, k=self.nb_neighbors)
-        target_neighbors = neighbor_indexes[0:self.nb_features, 0:self.nb_neighbors, :]
-        X_phylongb = _gather_target_neighbors(X, target_neighbors)
-        Coord_phylongb = _gather_target_neighbors(Coord, target_neighbors)
+        neighbor_indexes = _top_k(self.distances, k=self.nb_neighbors)
+        neighbour_idx_shape = K.int_shape(neighbor_indexes)
+        # target_neighbors = neighbor_indexes[0:self.nb_features, 0:self.nb_neighbors, :]
+        # target_neighbors._keras_shape = neighbour_idx_shape
+        X_phylongb = _gather_target_neighbors(X, neighbor_indexes)
+        Coord_phylongb = _gather_target_neighbors(Coord, neighbor_indexes)
 
         # Convolution step
         X_conv = super(PhyloConv1D, self).call(X_phylongb)
