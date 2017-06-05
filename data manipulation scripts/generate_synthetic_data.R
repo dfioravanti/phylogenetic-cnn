@@ -5,7 +5,7 @@ library(mvtnorm)
 set.seed(1234)
 
 # Total number of sample to be generated
-nb_total_output_samples <- 200
+nb_total_output_samples <- 400
 
 # Proportion of test data to be generated
 proportion_test = 0.20
@@ -20,11 +20,11 @@ coordinates_path <- paste(datasets_path, "coordinates/coordinates_", tolower(des
 training_samples_path <- paste(datasets_path,"true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
                                 desease, "_commsamp_training.txt", sep="")
 test_samples_path <- paste(datasets_path, "true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
-                           desease, "_commsamp_validation.txt", sep="")
+                           desease, "_commsamp_test.txt", sep="")
 training_target_path <- paste(datasets_path, "true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
                                desease, "_commsamp_training_lab.txt", sep="")
 test_target_path <- paste(datasets_path, "true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
-                           desease, "_commsamp_validation_lab.txt", sep="")
+                           desease, "_commsamp_test_lab.txt", sep="")
 
 output_dir_path <- paste(datasets_path, "synthetic_data/HS_", desease,
                          "/", nb_total_output_samples, sep="")
@@ -95,6 +95,8 @@ m2 <- sum((means_sick-means_healty)^2)
 mu <- (means_healty+means_sick)/2
 sigma1 <- sqrt((sum(project_hs^2)+sum(project_cdf-m2))/(dim(original_healty)[1]+dim(original_sick)[1]))
 
+# Higher alpha means more separate data, lower than one alpha means less separate.
+# alpha equa to one is to maintain the separation as in the original data
 alpha <- 1
 mean1 <- mu + alpha*sigma1*means_healty/norm(means_healty,'2')
 mean2 <- mu + alpha*sigma1*means_sick/norm(means_sick,'2')
