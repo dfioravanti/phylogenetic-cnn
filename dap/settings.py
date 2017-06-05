@@ -187,19 +187,6 @@ metrics = ['accuracy']
 
 # Optimizer
 # ---------
-# This must be a dictionary where one specifies the name of the
-# Keras optimizer to be used and all the other entry will be
-# passed to that optimizer constructor as parameters
-
-optimizer_configuration = {
-    'name': 'Adam',
-    'lr': 0.001,
-    'decay': 1e-06,
-    'epsilon': 1e-08,
-    'beta_1': 0.9,
-    'beta_2': 0.999
-}
-
 # This can either be a string or an
 # optimizer object (see keras.optimizers)
 from keras.optimizers import Adam

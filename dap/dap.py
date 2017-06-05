@@ -1080,9 +1080,16 @@ class DeepLearningDAP(DAP):
         if settings.class_weight:
             self.extra_fit_params['class_weight'] = settings.class_weight
 
-        # Compilation Settings
-        self.optimizer_configuration = settings.optimizer_configuration
+        # Compilation Settings, we need to salve the class and
+        # configuration since after every experiment we need to call
+        # K.clear_session to reduce TensorFlow memory leak. This operation
+        # destroy the optimizer and we need to recreate it. To do so we need
+        # both the class and the configuration
         self.optimizer = settings.optimizer
+        if not isinstance(self.optimizer, str):
+            self.optimizer_class = self.optimizer.__class__
+            self.optimizer_configuration = self.optimizer.get_config()
+
         self.loss_function = settings.loss
         self.learning_metrics = settings.metrics
         self.loss_weights = settings.loss_weights
@@ -1141,29 +1148,11 @@ class DeepLearningDAP(DAP):
         """
         K.clear_session()
 
-    def _get_optimizer(self, optimizer_configuration):
-        """
-        Method that returns a Keras optimizer given a configuration
-        
-        Parameters
-        ----------
-        optimizer_configuration: Dict
-            A dictionary of strings where a key is the name of the optimizer and the 
-            rest are configurations values for the selected optimizer
+        # If the optimizer is not a string we need to recreate it
+        # since the graph is new after calling clear session
 
-        Returns
-        -------
-
-        optimizer: Keras.Optimizer
-            The selected optimizer correctly configured
-
-        """
-        optimizer = self.optimizer
-        if isinstance(optimizer, str):
-            return optimizer
-        optimizer_config = self.optimizer.get_config()
-        optimizer_cls = self.optimizer.__class__
-        return optimizer_cls(**optimizer_config)
+        if not isinstance(self.optimizer, str):
+            self.optimizer = self.optimizer_class(**self.optimizer_configuration)
 
     def _create_ml_model(self):
         """Instantiate a new Keras Deep Network to be used in the fit-predict step.
@@ -1185,8 +1174,7 @@ class DeepLearningDAP(DAP):
         if self.extra_compile_params:
             extra_compile_params.update(**self.extra_compile_params)
 
-        optimizer = self._get_optimizer(self.optimizer_configuration)
-        model.compile(loss=self.loss_function, optimizer=optimizer,
+        model.compile(loss=self.loss_function, optimizer=self.optimizer,
                       metrics=self.learning_metrics, **extra_compile_params)
         return model
 
