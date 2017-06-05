@@ -868,7 +868,8 @@ class DAP(ABC):
 
         # Set Training data
         X_train, X_val, y_train, y_val = train_test_split(self.X, self.y,
-                                                          test_size=0.2, random_state=np.random.seed())
+                                                          test_size=settings.validation_split_in_test,
+                                                          random_state=np.random.seed())
 
         # 2.1 Apply Feature Scaling (if needed)
         if self.apply_feature_scaling:

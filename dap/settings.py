@@ -105,6 +105,12 @@ fit_verbose = 1
 # (Automatically ignored if `validation_data` is provided)
 validation_split = 0.0  # Default: no split
 
+# Validation in test
+# ------------------
+# Percentage of test data to be used as validation
+# in training during the fit of the best model
+validation_split_in_test = 0.2
+
 # Shuffle (boolean)
 # -----------------
 # Whether to shuffle the samples at each epoch.
