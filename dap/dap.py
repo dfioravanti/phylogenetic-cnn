@@ -1022,10 +1022,6 @@ class DAP(ABC):
         ----------
         best_model 
             The best model trained by the run() method
-        X_test
-            Test samples
-        Y_test
-            Test targets
         """
         self._set_test_data()
         X_test = self.X_test
@@ -1162,9 +1158,7 @@ class DeepLearningDAP(DAP):
         model: keras.models.Model
             The new deep learning Keras model.
         """
-
-        # Reduces tensorflow memory leak
-
+        
         model = self._build_network()
 
         # Set Compilation Params
