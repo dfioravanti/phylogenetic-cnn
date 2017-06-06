@@ -84,14 +84,16 @@ class PhyloDAP(DeepLearningDAP):
                                 "please use less neighbors or use more features")
 
             distances = euclidean_distances(conv_crd)
-            conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
+            conv_layer, conv_crd = PhyloConv1D(distances,
+                                               nb_neighbors,
+                                               nb_filters, activation='tanh')([conv_layer, conv_crd])
 
             conv_layer = BatchNormalization(axis=1)(conv_layer)
             conv_layer = Dropout(0.25, seed=np.random.seed())(conv_layer)
 
         max = MaxPooling1D(pool_size=2, padding="valid")(conv_layer)
         flatt = Flatten()(max)
-        drop = Dropout(0.25)(Dense(units=64)(flatt))
+        drop = Dropout(0.25)(Dense(units=8)(flatt))
         output = Dense(units=nb_classes, kernel_initializer="he_normal",
                        activation="softmax", name='output')(drop)
 
