@@ -867,9 +867,15 @@ class DAP(ABC):
         self._feature_step_nb = self.cv_n + 1  # flag value indicating last step
 
         # Set Training data
-        X_train, X_val, y_train, y_val = train_test_split(self.X, self.y,
-                                                          test_size=settings.validation_split_in_test,
-                                                          random_state=np.random.seed())
+        if self.is_stratified:
+            X_train, X_val, y_train, y_val = train_test_split(self.X, self.y,
+                                                              test_size=settings.validation_split_in_test,
+                                                              random_state=np.random.seed(),
+                                                              stratify=self.y)
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(self.X, self.y,
+                                                              test_size=settings.validation_split_in_test,
+                                                              random_state=np.random.seed())
 
         # 2.1 Apply Feature Scaling (if needed)
         if self.apply_feature_scaling:
@@ -1023,6 +1029,7 @@ class DAP(ABC):
         best_model 
             The best model trained by the run() method
         """
+
         self._set_test_data()
         X_test = self.X_test
         Y_test = self.y_test
@@ -1480,3 +1487,11 @@ class DeepLearningDAP(DAP):
         predicted_class_probs = model.predict(X_validation)
         predicted_classes = predicted_class_probs.argmax(axis=-1)
         return predicted_classes, predicted_class_probs
+
+    def run(self, verbose=False):
+        dap_model = super(DeepLearningDAP, self).run(verbose)
+
+        if verbose:
+            dap_model.summary()
+
+        return dap_model
