@@ -17,7 +17,7 @@ DISEASE = 'CDf'
 # two type of data avaiable: true_data or synthetic_data
 
 TRUE_DATA = 'true_data'
-SYNT_DATA = 'syntheic_data'
+SYNT_DATA = 'synthetic_data'
 # Choose one of the two above!
 TYPE_DATA = TRUE_DATA
 
