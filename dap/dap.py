@@ -791,7 +791,7 @@ class DAP(ABC):
             List of extra metrics to be logged during execution. Default: None
         """
         model = model.fit(X_train, y_train)
-        extra_metrics = None  # No extra metrics is returned by default
+        extra_metrics = dict()  # No extra metrics is returned by default
         return model, extra_metrics
 
     def _predict(self, model, X_validation, y_validation=None, **kwargs):
@@ -1044,9 +1044,6 @@ class DAP(ABC):
         Y = self._prepare_targets(Y_test)
 
         predicted_classes, predicted_class_probs = self._predict(best_model, X_test)
-
-        print(best_model.metrics_names)
-        print(best_model.evaluate(X_test, Y))
 
         self._compute_test_metrics(Y_test, predicted_classes, predicted_class_probs)
         self._save_test_metrics_to_file(self._get_output_folder())
