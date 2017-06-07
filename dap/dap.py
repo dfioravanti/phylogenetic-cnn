@@ -1034,6 +1034,9 @@ class DAP(ABC):
         X_test = self.X_test
         Y_test = self.y_test
 
+        if self.apply_feature_scaling:
+            _, X_test = self._apply_scaling(self.X, self.X_test)
+
         # Select the correct features and prepare the data before predict
         feature_ranking = self._best_feature_ranking[:self._nb_features]
         X_test = self._select_ranked_features(feature_ranking, X_test)
