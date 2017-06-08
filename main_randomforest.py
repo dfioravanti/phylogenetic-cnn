@@ -22,7 +22,7 @@ class RandomForestDAP(DAP):
 
     @property
     def ml_model_name(self):
-        return 'Random Forest'
+        return 'RandomForest'
 
     def _get_output_folder(self):
         """
