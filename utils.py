@@ -72,3 +72,14 @@ def to_list(e):
     if isinstance(e, list):
         return e
     return [e]
+
+
+def merge_file(file_1, file_2, path_new_file, skip_header_second_file=False):
+
+    with open(path_new_file, "w") as f:
+        with open(file_1, "r") as f_1:
+            f.write(f_1.read())
+        with open(file_2, "r") as f_2:
+            if skip_header_second_file:
+                next(f_2)
+            f.write(f_2.read())
