@@ -6,7 +6,7 @@ import os
 import settings
 from dap import DAP
 
-from utils import get_data, to_list
+from utils import get_data
 
 
 class RandomForestDAP(DAP):
