@@ -5,7 +5,7 @@ library(mvtnorm)
 set.seed(1234)
 
 # Total number of sample to be generated
-nb_total_output_samples <- 400
+nb_total_output_samples <- 20000
 
 # Proportion of test data to be generated
 proportion_test = 0.20
@@ -96,7 +96,7 @@ mu <- (means_healty+means_sick)/2
 sigma1 <- sqrt((sum(project_hs^2)+sum(project_cdf-m2))/(dim(original_healty)[1]+dim(original_sick)[1]))
 
 # Higher alpha means more separate data, lower than one alpha means less separate.
-# alpha equa to one is to maintain the separation as in the original data
+# alpha equal to one is to maintain the separation as in the original data
 alpha <- 1
 mean1 <- mu + alpha*sigma1*means_healty/norm(means_healty,'2')
 mean2 <- mu + alpha*sigma1*means_sick/norm(means_sick,'2')
@@ -108,6 +108,18 @@ nb_healty <- nb_total_output_samples - nb_sick
 
 multivariate_healty <- rmvnorm(nb_healty, mean=mean1 , sigma=covariance_healty, method="svd")
 multivariate_sick <- rmvnorm(nb_sick, mean=mean2, sigma=covariance_sick, method="svd")
+
+# Introduce some noise to aboid that the synthetica datas are not noisy enough to 
+# imitate the real data
+
+nb_dimensions <- length(mean1)
+noise_mean <- rep(0, nb_dimensions)
+noise_variance <- diag(nb_dimensions) * 0.33
+noise_healty <- rmvnorm(nb_healty, mean = noise_mean, sigma = noise_variance, method = "svd")
+noise_sick <- rmvnorm(nb_sick, mean = noise_mean, sigma = noise_variance, method = "svd")
+
+multivariate_healty <- multivariate_healty + noise_healty
+multivariate_sick <- multivariate_sick + noise_sick
 
 synthetic_data_healty <- ilrInv(multivariate_healty)
 synthetic_data_sick <- ilrInv(multivariate_sick)
