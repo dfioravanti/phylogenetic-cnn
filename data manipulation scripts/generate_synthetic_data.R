@@ -5,7 +5,7 @@ library(mvtnorm)
 set.seed(1234)
 
 # Total number of sample to be generated
-nb_total_output_samples <- 20000
+nb_total_output_samples <- 200
 
 # Proportion of test data to be generated
 proportion_test = 0.20
