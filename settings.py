@@ -20,12 +20,13 @@ DISEASE = 'CDf'
 TRUE_DATA = 'true_data'
 SYNT_DATA = 'synthetic_data'
 MIX_DATA = 'mix_data'
-# Choose one of the two above!
-TYPE_DATA = MIX_DATA
+SCIKIT_DATA = 'scikit_data'
+# Choose one of the above!
+TYPE_DATA = SCIKIT_DATA
 
 # This can be empty, if so the datasets will be located in HD_DISEASE/
 # instead of HD_DISEASE/NB_SAMPLES
-NB_SAMPLES = '200'
+NB_SAMPLES = '1000'
 
 COORDINATES_FILEPATH = os.path.join(DATA_DIR, 'coordinates',
                                     ''.join(['coordinates_', DISEASE.lower(), '.txt']))
@@ -86,6 +87,16 @@ elif TYPE_DATA == MIX_DATA:
     TEST_LABELS_FILEPATH = os.path.join(MIX_DISEASE_FOLDER, 'test_label.txt')
     merge_file(TRUE_TRAINING_LABELS_FILEPATH, TRUE_TEST_LABELS_FILEPATH,
                TEST_LABELS_FILEPATH)
+elif TYPE_DATA == SCIKIT_DATA:
+    TRAINING_DATA_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, DISEASE,
+                                          NB_SAMPLES, 'training.txt')
+    TRAINING_LABELS_FILEPATH =  os.path.join(DATA_DIR, TYPE_DATA, DISEASE,
+                                             NB_SAMPLES, 'training_labels.txt')
+    TEST_DATA_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, DISEASE,
+                                      NB_SAMPLES, 'test.txt')
+    TEST_LABELS_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, DISEASE,
+                                        NB_SAMPLES, 'test_labels.txt')
+
 else:
     raise Exception("Select a correct type of data")
 
