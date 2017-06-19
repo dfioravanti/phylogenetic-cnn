@@ -499,7 +499,15 @@ class DAP(ABC):
 
         return k_features_indices
 
-    def _extra_operations_experiment(self):
+    def _extra_operations_begin_fold(self):
+        """
+        Method to be implemented in case that extra operations are needed at the beginning
+        of every fold. by default, no extra operations are needed
+        """
+        pass
+
+
+    def _extra_operations_end_experiment(self):
         """
         Method to be implemented in case that extra operations are needed at the end of
         every experiment. by default, no extra operations are needed
@@ -948,6 +956,8 @@ class DAP(ABC):
                 self._fold_training_indices = training_indices
                 self._fold_validation_indices = validation_indices
 
+                self._extra_operations_begin_fold()
+
                 if verbose:
                     print('=' * 80)
                     print('Experiment: {} - Fold {} over {} folds'.format(runstep + 1, fold + 1, self.cv_k))
@@ -995,7 +1005,7 @@ class DAP(ABC):
                         print("MCC: {}".format(
                             self.metrics[self.MCC][self._iteration_step_nb, self._feature_step_nb]))
 
-            self._extra_operations_experiment()
+            self._extra_operations_end_experiment()
 
         # Compute Confidence Intervals for all target metrics
         self._compute_metrics_confidence_intervals(k_features_indices)

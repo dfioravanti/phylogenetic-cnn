@@ -2,7 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import os
-from sklearn.metrics import make_scorer, matthews_corrcoef
+import sys
+
+from sklearn.pipeline import Pipeline
+from sklearn import model_selection
+from sklearn import svm
 
 import settings
 from dap import DAP
@@ -19,9 +23,12 @@ class SVM_DAP(DAP):
         self.type_data = settings.TYPE_DATA
         self.total_nb_samples = settings.NB_SAMPLES
 
-        # SVM parameters
-        self.scorer = make_scorer(matthews_corrcoef)
-        self.C = None
+        # SVM parameters for tuning
+
+        self.C = 1.0
+        self.tuning_pipeline = Pipeline([('scaler', self.feature_scaler),
+                                         ('SVM', self._create_ml_model())
+                                        ])
     # ==== Abstract Methods Implementation ====
 
     @property
@@ -49,8 +56,32 @@ class SVM_DAP(DAP):
         ---------
         """
 
-        from sklearn import svm
-        return svm.SVC()
+        return svm.SVC(C=self.C, kernel=settings.kernel)
+
+    def _extra_operations_begin_fold(self):
+
+        print("-------------------------")
+        print("Tuning SVM")
+        print("-------------------------")
+
+        Xs_tr = self.X[self._fold_training_indices]
+        ys_tr = self.y[self._fold_training_indices]
+
+        tuning_cross_validation = model_selection.StratifiedShuffleSplit(n_splits=settings.tuning_cv_K,
+                                                                         test_size=settings.tuning_cv_P,
+                                                                         random_state=self._fold_nb)
+
+        grid_search = model_selection.GridSearchCV(estimator=self.tuning_pipeline,
+                                                   param_grid=settings.tuning_parameter,
+                                                   cv=tuning_cross_validation,
+                                                   scoring=settings.scorer)
+
+        grid_search.fit(Xs_tr, ys_tr)
+        self.C = grid_search.best_estimator_.get_params()['SVM__C']
+
+    def _train_best_model(self, k_feature_indices, seed=None):
+        self._extra_operations_begin_fold()
+        return super(SVM_DAP, self)._train_best_model(k_feature_indices, seed)
 
 
 def main():

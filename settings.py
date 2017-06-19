@@ -109,9 +109,32 @@ else:
 # for example [8, 16, 32] will generate a
 # phyloconv1D with 8 filters -> phyloconv1D with 16 filters -> phyloconv1D with 32 filters -> dropout
 # any new block will attached to the previous one.
-nb_convolutional_filters = [32, 64]
+nb_convolutional_filters = [4, 8]
 
 # No. of Neighbours
 # The structures should be the same as nb_convolutional_filters any number represents the number of
 # neighbours for that phyloconv1D
 nb_phylo_neighbours = [4, 4]
+
+# ==================================
+# -- SVM Model Specific Section
+# ==================================
+
+# scorer
+# --------------------------
+from sklearn.metrics import make_scorer, matthews_corrcoef
+scorer = make_scorer(matthews_corrcoef)
+
+# parameters
+tuning_parameter = [{'SVM__C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}]
+
+# Tuning cross validation
+# --------------------------
+# No. Split
+tuning_cv_K = 5
+# Percent test split
+tuning_cv_P = 0.1
+
+# kernel
+# --------------------------
+kernel = 'linear'

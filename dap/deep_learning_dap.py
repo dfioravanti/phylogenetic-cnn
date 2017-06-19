@@ -103,7 +103,7 @@ class DeepLearningDAP(DAP):
         self.ml_model_ = model
         return self.ml_model_
 
-    def _extra_operations_experiment(self):
+    def _extra_operations_end_experiment(self):
         """
         Method that resets the Keras session at the end of each experiment.
         We need this in order to reduce the memory leak from tensorflow.
