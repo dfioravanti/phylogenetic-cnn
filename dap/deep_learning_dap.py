@@ -6,7 +6,8 @@ from keras import backend as K
 from keras.callbacks import ModelCheckpoint
 from keras.models import model_from_json
 
-from dap import DAP, settings
+
+from dap import DAP, settings, settings_deep_learning
 
 
 class DeepLearningDAP(DAP):
@@ -26,37 +27,37 @@ class DeepLearningDAP(DAP):
         super(DeepLearningDAP, self).__init__(experiment=experiment)
 
         # Set additional attributes from Deep Learning Specific Settings set.
-        self.learning_epochs = settings.epochs
-        self.batch_size = settings.batch_size
-        self.fit_verbose = settings.fit_verbose
-        self.fit_callbacks = settings.callbacks
+        self.learning_epochs = settings_deep_learning.epochs
+        self.batch_size = settings_deep_learning.batch_size
+        self.fit_verbose = settings_deep_learning.fit_verbose
+        self.fit_callbacks = settings_deep_learning.callbacks
 
         # extra fit parameters
         self.extra_fit_params = {
             'validation_split': settings.validation_split,
-            'shuffle': settings.shuffle,
+            'shuffle': settings_deep_learning.shuffle,
         }
-        if settings.initial_epoch:
-            self.extra_fit_params['initial_epoch'] = settings.initial_epoch
-        if settings.sample_weight:
-            self.extra_fit_params['sample_weight'] = settings.sample_weight
-        if settings.class_weight:
-            self.extra_fit_params['class_weight'] = settings.class_weight
+        if settings_deep_learning.initial_epoch:
+            self.extra_fit_params['initial_epoch'] = settings_deep_learning.initial_epoch
+        if settings_deep_learning.sample_weight:
+            self.extra_fit_params['sample_weight'] = settings_deep_learning.sample_weight
+        if settings_deep_learning.class_weight:
+            self.extra_fit_params['class_weight'] = settings_deep_learning.class_weight
 
         # Compilation Settings, we need to salve the class and
         # configuration since after every experiment we need to call
         # K.clear_session to reduce TensorFlow memory leak. This operation
         # destroy the optimizer and we need to recreate it. To do so we need
         # both the class and the configuration
-        self.optimizer = settings.optimizer
+        self.optimizer = settings_deep_learning.optimizer
         if not isinstance(self.optimizer, str):
             self.optimizer_class = self.optimizer.__class__
             self.optimizer_configuration = self.optimizer.get_config()
 
-        self.loss_function = settings.loss
-        self.learning_metrics = settings.metrics
-        self.loss_weights = settings.loss_weights
-        self.extra_compile_params = settings.extra_compilation_parameters
+        self.loss_function = settings_deep_learning.loss
+        self.learning_metrics = settings_deep_learning.metrics
+        self.loss_weights = settings_deep_learning.loss_weights
+        self.extra_compile_params = settings_deep_learning.extra_compilation_parameters
 
         # Model Cache - one model reference per feature step
         self._model_cache = {}
@@ -168,10 +169,10 @@ class DeepLearningDAP(DAP):
         metrics = super(DeepLearningDAP, self)._prepare_metrics_array()
 
         metrics_shape = (self.iteration_steps, self.feature_steps)
-        metrics[self.NN_LOSS] = np.zeros(metrics_shape + (settings.epochs,), dtype=np.float)
-        metrics[self.NN_VAL_LOSS] = np.zeros(metrics_shape + (settings.epochs,), dtype=np.float)
-        metrics[self.NN_ACC] = np.zeros(metrics_shape + (settings.epochs,), dtype=np.float)
-        metrics[self.NN_VAL_ACC] = np.zeros(metrics_shape + (settings.epochs,), dtype=np.float)
+        metrics[self.NN_LOSS] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
+        metrics[self.NN_VAL_LOSS] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
+        metrics[self.NN_ACC] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
+        metrics[self.NN_VAL_ACC] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
         return metrics
 
     def _compute_extra_step_metrics(self, validation_indices=None, validation_labels=None,
@@ -209,8 +210,8 @@ class DeepLearningDAP(DAP):
             for history_key, metric_name in zip(standard_metrics, metric_keys):
                 metric_values = model_history.history.get(history_key, None)
                 if metric_values:
-                    if len(metric_values) < settings.epochs:  # early stopping case
-                        values = np.zeros(shape=settings.epochs)
+                    if len(metric_values) < settings_deep_learning.epochs:  # early stopping case
+                        values = np.zeros(shape=settings_deep_learning.epochs)
                         values[:len(metric_values)] = metric_values
                     else:
                         values = np.array(metric_values)
@@ -249,8 +250,8 @@ class DeepLearningDAP(DAP):
             for history_key, metric_name in zip(standard_metrics, metric_keys):
                 metric_values = model_history.history.get(history_key, None)
                 if metric_values:
-                    if len(metric_values) < settings.epochs:  # early stopping case
-                        values = np.zeros(shape=settings.epochs)
+                    if len(metric_values) < settings_deep_learning.epochs:  # early stopping case
+                        values = np.zeros(shape=settings_deep_learning.epochs)
                         values[:len(metric_values)] = metric_values
                     else:
                         values = np.array(metric_values)

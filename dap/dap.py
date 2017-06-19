@@ -8,10 +8,11 @@ from inspect import isclass, isfunction, ismethod
 import mlpy
 import numpy as np
 import pandas as pd
-from keras.utils import np_utils
+
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 
+from . import np_utils
 from . import settings
 from .metrics import (npv, ppv, sensitivity, specificity,
                       KCCC_discrete, dor, accuracy)

@@ -11,7 +11,7 @@ from keras.layers import (Lambda, MaxPooling1D, Flatten,
 
 import pickle
 import settings
-from dap import DeepLearningDAP
+from dap.deep_learning_dap import DeepLearningDAP
 from phcnn.layers import PhyloConv1D, euclidean_distances
 from utils import get_data, to_list
 
