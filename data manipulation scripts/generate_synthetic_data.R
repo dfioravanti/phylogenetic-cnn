@@ -2,10 +2,10 @@
 
 library(compositions)
 library(mvtnorm)
-set.seed(1234)
+set.seed(42)
 
 # Total number of sample to be generated
-nb_total_output_samples <- 200
+nb_total_output_samples <- 10000
 
 # Proportion of test data to be generated
 proportion_test = 0.20
@@ -93,11 +93,11 @@ project_cdf <- AD%*%AB
 m1 <- 0
 m2 <- sum((means_sick-means_healty)^2)
 mu <- (means_healty+means_sick)/2
-sigma1 <- sqrt((sum(project_hs^2)+sum(project_cdf-m2))/(dim(original_healty)[1]+dim(original_sick)[1]))
+sigma1 <- sqrt((sum(project_hs^2)+sum((project_cdf-m2)^2))/(dim(original_healty)[1]+dim(original_sick)[1]))
 
 # Higher alpha means more separate data, lower than one alpha means less separate.
-# alpha equal to one is to maintain the separation as in the original data
-alpha <- 1
+# alpha equal to 1/sigma1 is to maintain the separation as in the original data
+alpha <- 1/sigma1
 mean1 <- mu + alpha*sigma1*means_healty/norm(means_healty,'2')
 mean2 <- mu + alpha*sigma1*means_sick/norm(means_sick,'2')
 
