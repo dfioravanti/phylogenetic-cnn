@@ -71,7 +71,7 @@ class PhyloDAP(DeepLearningDAP):
         #     nb_neighbors = nb_features
 
         conv_layer = data
-        conv_crd = Lambda(lambda c: c[0])(coordinates)
+        conv_crd = Lambda(lambda c: c[0], output_shape=lambda s: (s[1:]))(coordinates)
         for nb_filters, nb_neighbors in zip(filters, nb_neighbours):
             distances = euclidean_distances(conv_crd)
             conv_layer, conv_crd = PhyloConv1D(distances, nb_neighbors, nb_filters)([conv_layer, conv_crd])
