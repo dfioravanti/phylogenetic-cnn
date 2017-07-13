@@ -4,7 +4,7 @@
 # is automatically loaded any time any dap function is used
 
 from . import settings
-from .dap import DAP
+from .dap import DAP, DAPRegr
 from .metrics import *
 from .scaling import *
 from .ranking import *
