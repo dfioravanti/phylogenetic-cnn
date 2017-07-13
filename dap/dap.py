@@ -17,7 +17,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.metrics import (explained_variance_score, mean_absolute_error,
                              mean_squared_error, median_absolute_error, r2_score )
 from sklearn.model_selection import train_test_split
-# from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from . import np_utils
 from . import settings
@@ -49,6 +49,8 @@ class DAP(ABC):
 
     BASE_METRICS = [ACC, DOR, AUC, MCC, SPEC, SENS, PPV, NPV, RANKINGS, PREDS]
 
+    REF_STEP_METRIC = MCC
+
     # Confidence Intervals
     MCC_CI = 'MCC_CI'
     SPEC_CI = 'SPEC_CI'
@@ -61,7 +63,7 @@ class DAP(ABC):
 
     CI_METRICS = [MCC_CI, SPEC_CI, SENS_CI, DOR_CI, ACC_CI, AUC_CI, PPV_CI, NPV_CI]
 
-    # Reference Metric to consider when getting best feature results
+    # Reference Metric to consider when getting best feature results (see _train_best_model)
     DAP_REFERENCE_METRIC = MCC_CI
 
     TEST_SET = 'TEST_SET'
@@ -383,6 +385,10 @@ class DAP(ABC):
         for ci_key in self.CI_METRICS:
             metric_key = getattr(self, ci_key.split('_')[0])
             self._compute_ci_metric(feature_steps, ci_key, metric_key)
+
+    def _print_ref_step_metric(self):
+        return "{}: {}".format(self.REF_STEP_METRIC,
+                               self.metrics[self.REF_STEP_METRIC][self._iteration_step_nb, self._feature_step_nb])
 
     @staticmethod
     def _save_metric_to_file(metric_filename, metric, columns=None, index=None):
@@ -1010,8 +1016,7 @@ class DAP(ABC):
                     self._compute_step_metrics(validation_indices, y_validation, predictions, **extra_metrics)
 
                     if verbose:
-                        print("MCC: {}".format(
-                            self.metrics[self.MCC][self._iteration_step_nb, self._feature_step_nb]))
+                        print(self._print_ref_step_metric())
 
             self._extra_operations_end_experiment()
 
@@ -1078,6 +1083,7 @@ class DAPRegr(DAP):
     R2_CI = 'R2_CI'
 
     DAP_REFERENCE_METRIC = R2_CI
+    REF_STEP_METRIC = R2
 
     BASE_METRICS = [EVS, MAE, MSE, MedAE, R2]
     CI_METRICS = [EVS_CI, MAE_CI, MedAE_CI, MSE_CI, R2_CI]
