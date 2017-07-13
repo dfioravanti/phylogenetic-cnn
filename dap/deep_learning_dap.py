@@ -7,7 +7,8 @@ from keras.callbacks import ModelCheckpoint
 from keras.models import model_from_json
 
 
-from dap import DAP, settings, settings_deep_learning
+from dap import DAP, DAPRegr
+from dap import settings_deep_learning
 
 
 class DeepLearningDAP(DAP):
@@ -34,7 +35,7 @@ class DeepLearningDAP(DAP):
 
         # extra fit parameters
         self.extra_fit_params = {
-            'validation_split': settings.validation_split,
+            'validation_split': settings_deep_learning.validation_split,
             'shuffle': settings_deep_learning.shuffle,
         }
         if settings_deep_learning.initial_epoch:
@@ -444,3 +445,44 @@ class DeepLearningDAP(DAP):
             dap_model.summary()
 
         return dap_model
+
+
+class DeepLearningDAPRegr(DeepLearningDAP, DAPRegr):
+    """Deep Learning DAP Specialisation for Regression Tasks"""
+
+    DAP_REFERENCE_METRIC = DAPRegr.R2_CI
+    REF_STEP_METRIC = DAPRegr.R2
+
+    BASE_METRICS = [DAPRegr.EVS, DAPRegr.MAE,
+                    DAPRegr.MSE, DAPRegr.MedAE, DAPRegr.R2]
+    
+    CI_METRICS = [DAPRegr.EVS_CI, DAPRegr.MAE_CI,
+                  DAPRegr.MedAE_CI, DAPRegr.MSE_CI, DAPRegr.R2_CI]
+
+    def __init__(self, experiment):
+        DeepLearningDAP.__init__(self, experiment)
+        DAPRegr.__init__(self, experiment)
+
+        # ==== Overriding of Utility Methods ====
+        #
+        def _prepare_metrics_array(self):
+            """
+            Specialise metrics with extra DNN specific metrics.
+            """
+            metrics = DAPRegr._prepare_metrics_array(self)
+
+            metrics_shape = (self.iteration_steps, self.feature_steps)
+            metrics[self.NN_LOSS] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
+            metrics[self.NN_VAL_LOSS] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
+            metrics[self.NN_ACC] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
+            metrics[self.NN_VAL_ACC] = np.zeros(metrics_shape + (settings_deep_learning.epochs,), dtype=np.float)
+            return metrics
+
+        def _compute_step_metrics(self, validation_indices, y_true_validation,
+                                  predictions, **extra_metrics):
+            DAPRegr._compute_step_metrics(self, validation_indices, y_true_validation, predictions, **extra_metrics)
+
+        def _compute_test_metrics(self, y_true_test, predictions, **extra_metrics):
+            DAPRegr._compute_test_metrics(self, y_true_test, predictions, **extra_metrics)
+
+
