@@ -68,18 +68,12 @@ use_top_feature = False
 
 # Determine the features to use in testing through BORDA
 # ranking instead of using the usual ranking feature procedure
-
 use_borda = True
 
 
 # --------------------------
 # 3. Validation section
 # --------------------------
-
-# Validation split
-# ----------------
-# (Automatically ignored if `validation_data` is provided)
-validation_split = 0.0  # Default: no split
 
 # Validation in test
 # ------------------
