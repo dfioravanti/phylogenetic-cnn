@@ -1,4 +1,8 @@
-"""Main module implementing Data Analysis Plan"""
+"""Main module implementing Data Analysis Plan.
+
+This module provides two main classes, namely `DAP` and `DAPRegr` specifically designed for
+classification and regression applications of the Daa Analysis Protocol.
+"""
 
 import os
 import pickle
@@ -10,7 +14,10 @@ import numpy as np
 import pandas as pd
 
 from sklearn.metrics import roc_auc_score
+from sklearn.metrics import (explained_variance_score, mean_absolute_error,
+                             mean_squared_error, median_absolute_error, r2_score )
 from sklearn.model_selection import train_test_split
+# from sklearn.model_selection import KFold, StratifiedKFold
 
 from . import np_utils
 from . import settings
@@ -53,6 +60,9 @@ class DAP(ABC):
     AUC_CI = 'AUC_CI'
 
     CI_METRICS = [MCC_CI, SPEC_CI, SENS_CI, DOR_CI, ACC_CI, AUC_CI, PPV_CI, NPV_CI]
+
+    # Reference Metric to consider when getting best feature results
+    DAP_REFERENCE_METRIC = MCC_CI
 
     TEST_SET = 'TEST_SET'
 
@@ -100,11 +110,13 @@ class DAP(ABC):
         # Store reference to the best feature ranking
         self._best_feature_ranking = None
 
+        # -----------------------
         # Contextual Information:
         # -----------------------
         # Attributes saving information on the context of the DAP process,
-        # namely the reference to the iteration no. of the CV,
-        # corresponding feature step, and so on.
+        # e.g. the reference to the iteration no. of the CV,
+        # the current feature step, and so on.
+        #
         # This information will be updated throughout the execution of the process,
         # keeping track of current actual progresses.
         self._fold_training_indices = None  # indices of samples in training set
@@ -120,7 +132,6 @@ class DAP(ABC):
         # In fact it is mandatory to know
         # the total number of features to be used so to properly
         # set the shape of the first InputLayer(s).
-        # Contextual information exposed in order to be used for verbose printing
 
     @property
     def ml_model(self):
@@ -231,15 +242,14 @@ class DAP(ABC):
             self.DOR_CI: np.empty((self.feature_steps, 3)),
 
             # Test dictionary
-
             self.TEST_SET: dict()
         }
         # Initialize to Flag Values
         metrics[self.PREDS][:, :, :] = -10
         return metrics
 
-    def _compute_step_metrics(self, validation_indices, validation_labels,
-                              predicted_labels, predicted_class_probs, **extra_metrics):
+    def _compute_step_metrics(self, validation_indices, y_true_validation,
+                              predictions, **extra_metrics):
         """
         Compute the "classic" DAP Step metrics for corresponding iteration-step and feature-step.
         
@@ -248,15 +258,11 @@ class DAP(ABC):
         validation_indices: array-like, shape = [n_samples]
             Indices of validation samples
             
-        validation_labels: array-like, shape = [n_samples]
-            Array of labels for samples in the validation set
+        y_true_validation: array-like, shape = [n_samples]
+            Array of true targets for samples in the validation set
             
-        predicted_labels: array-like, shape = [n_samples]
-            Array of predicted labels for each sample in the validation set
-            
-        predicted_class_probs: array-like, shape = [n_samples, n_classes]
-            matrix containing the probability for each class and for each sample in the
-            validation set
+        predictions: array-like, shape = [n_samples] or tuple of array-like objects.
+            This parameter contains what has been returned by the `_fit_predict` method.
             
         Other Parameters
         ----------------
@@ -266,35 +272,38 @@ class DAP(ABC):
             This list will be processed separately from standard "base" metrics.
         """
 
+        # Process predictions
+        predicted_labels, _ = predictions  # prediction_probabilities are not used for base metrics.
+
         # Compute Base Step Metrics
         iteration_step, feature_step = self._iteration_step_nb, self._feature_step_nb
 
         self.metrics[self.PREDS][iteration_step, feature_step, validation_indices] = predicted_labels
-        self.metrics[self.NPV][iteration_step, feature_step] = npv(validation_labels, predicted_labels)
-        self.metrics[self.PPV][iteration_step, feature_step] = ppv(validation_labels, predicted_labels)
-        self.metrics[self.SENS][iteration_step, feature_step] = sensitivity(validation_labels, predicted_labels)
-        self.metrics[self.SPEC][iteration_step, feature_step] = specificity(validation_labels, predicted_labels)
-        self.metrics[self.MCC][iteration_step, feature_step] = KCCC_discrete(validation_labels, predicted_labels)
-        self.metrics[self.AUC][iteration_step, feature_step] = roc_auc_score(validation_labels, predicted_labels)
-        self.metrics[self.DOR][iteration_step, feature_step] = dor(validation_labels, predicted_labels)
-        self.metrics[self.ACC][iteration_step, feature_step] = accuracy(validation_labels, predicted_labels)
+        self.metrics[self.NPV][iteration_step, feature_step] = npv(y_true_validation, predicted_labels)
+        self.metrics[self.PPV][iteration_step, feature_step] = ppv(y_true_validation, predicted_labels)
+        self.metrics[self.SENS][iteration_step, feature_step] = sensitivity(y_true_validation, predicted_labels)
+        self.metrics[self.SPEC][iteration_step, feature_step] = specificity(y_true_validation, predicted_labels)
+        self.metrics[self.MCC][iteration_step, feature_step] = KCCC_discrete(y_true_validation, predicted_labels)
+        self.metrics[self.AUC][iteration_step, feature_step] = roc_auc_score(y_true_validation, predicted_labels)
+        self.metrics[self.DOR][iteration_step, feature_step] = dor(y_true_validation, predicted_labels)
+        self.metrics[self.ACC][iteration_step, feature_step] = accuracy(y_true_validation, predicted_labels)
 
         if extra_metrics:
-            self._compute_extra_step_metrics(validation_indices, validation_labels,
-                                             predicted_labels, predicted_class_probs, **extra_metrics)
+            self._compute_extra_step_metrics(validation_indices, y_true_validation,
+                                             predictions, **extra_metrics)
 
-    def _compute_extra_step_metrics(self, validation_indices=None, validation_labels=None,
-                                    predicted_labels=None, predicted_class_probs=None, **extra_metrics):
-        """Method to be implemented in case extra metrics are returned during the fit-predict step.
+    def _compute_extra_step_metrics(self, validation_indices=None, y_true_validation=None,
+                                    predictions=None, **extra_metrics):
+        """Method to be implemented in case extra metrics are returned during the *fit-predict* step.
            By default, no additional extra metrics are returned.
-           
-           Parameters are all the same of the "default" _compute_step_metrics method, with the 
-           exception that can be None to make the API even more flexible!
+
+        Parameters are all the same of the "default" `_compute_step_metrics` method, with the
+        exception that parameters can be `None` to make the API even more flexible!
+
         """
         pass
 
-    def _compute_test_metrics(self, test_labels, predicted_labels,
-                              predicted_class_probs, **extra_metrics):
+    def _compute_test_metrics(self, y_true_test, predictions, **extra_metrics):
 
         """
         Compute the "classic" DAP Step metrics for test data
@@ -302,15 +311,11 @@ class DAP(ABC):
         Parameters
         ----------
 
-        test_labels: array-like, shape = [n_samples]
-            Array of labels for samples in the validation set
+        y_true_test: array-like, shape = [n_samples]
+            Array of true targets for samples in the test set
 
-        predicted_labels: array-like, shape = [n_samples]
-            Array of predicted labels for each sample in the validation set
-
-        predicted_class_probs: array-like, shape = [n_samples, n_classes]
-            matrix containing the probability for each class and for each sample in the
-            validation set
+        predictions: array-like, shape = [n_samples] or tuple of array-like objects.
+            This parameter contains what has been returned by the `_predict` method.
 
         Other Parameters
         ----------------
@@ -320,29 +325,50 @@ class DAP(ABC):
             This list will be processed separately from standard "base" metrics.
         """
 
+        # Process predictions
+        predicted_labels, _ = predictions  # prediction_probabilities are not used for base metrics.
+
         self.metrics[self.TEST_SET][self.PREDS] = predicted_labels
-        self.metrics[self.TEST_SET][self.NPV] = npv(test_labels, predicted_labels)
-        self.metrics[self.TEST_SET][self.PPV] = ppv(test_labels, predicted_labels)
-        self.metrics[self.TEST_SET][self.SENS] = sensitivity(test_labels, predicted_labels)
-        self.metrics[self.TEST_SET][self.SPEC] = specificity(test_labels, predicted_labels)
-        self.metrics[self.TEST_SET][self.MCC] = KCCC_discrete(test_labels, predicted_labels)
-        self.metrics[self.TEST_SET][self.AUC] = roc_auc_score(test_labels, predicted_labels)
-        self.metrics[self.TEST_SET][self.DOR] = dor(test_labels, predicted_labels)
-        self.metrics[self.TEST_SET][self.ACC] = accuracy(test_labels, predicted_labels)
+        self.metrics[self.TEST_SET][self.NPV] = npv(y_true_test, predicted_labels)
+        self.metrics[self.TEST_SET][self.PPV] = ppv(y_true_test, predicted_labels)
+        self.metrics[self.TEST_SET][self.SENS] = sensitivity(y_true_test, predicted_labels)
+        self.metrics[self.TEST_SET][self.SPEC] = specificity(y_true_test, predicted_labels)
+        self.metrics[self.TEST_SET][self.MCC] = KCCC_discrete(y_true_test, predicted_labels)
+        self.metrics[self.TEST_SET][self.AUC] = roc_auc_score(y_true_test, predicted_labels)
+        self.metrics[self.TEST_SET][self.DOR] = dor(y_true_test, predicted_labels)
+        self.metrics[self.TEST_SET][self.ACC] = accuracy(y_true_test, predicted_labels)
 
         if extra_metrics:
-            self._compute_extra_test_metrics(test_labels, predicted_labels,
-                                             predicted_class_probs, **extra_metrics)
+            self._compute_extra_test_metrics(y_true_test, predictions, **extra_metrics)
 
-    def _compute_extra_test_metrics(self, test_labels=None, predicted_labels=None,
-                                    predicted_class_probs=None, **extra_metrics):
-        """Method to be implemented in case extra metrics are returned during the predict step.
+    def _compute_extra_test_metrics(self, y_true_test=None, predictions=None, **extra_metrics):
+        """Method to be implemented in case extra metrics are returned during the *predict* step.
            By default, no additional extra metrics are returned.
 
-           Parameters are all the same of the "default" _compute_test_metrics method, with the 
-           exception that can be None to make the API even more flexible!
+        Parameters are all the same of the "default" `_compute_test_metrics` method, with the
+        exception that can be `None` to make the API even more flexible!
         """
         pass
+
+    # Compute Confidence Intervals for Metrics
+    def _compute_ci_metric(self, feature_steps, ci_metric_key, metric_key):
+        """
+
+        Parameters
+        ----------
+        feature_steps: list
+            List of feature steps considered during the DAP process
+        ci_metric_key: str
+            The name of the key of metrics array where to store Metric-CI values
+        metric_key: str
+            The name of the reference metric used to calculate
+            Confidence Intervals
+        """
+        metric_means = np.mean(self.metrics[metric_key], axis=0)
+        for step, _ in enumerate(feature_steps):
+            metric_mean = metric_means[step]
+            ci_low, ci_hi = mlpy.bootstrap_ci(self.metrics[metric_key][:, step])
+            self.metrics[ci_metric_key][step] = np.array([metric_mean, ci_low, ci_hi])
 
     def _compute_metrics_confidence_intervals(self, feature_steps):
         """Compute Confidence Intervals for all target metrics.
@@ -353,22 +379,10 @@ class DAP(ABC):
             List of feature steps considered during the DAP process
         """
 
-        # Compute Confidence Intervals for Metrics
-        def _compute_ci_metric(ci_metric_key, metric_key):
-            metric_means = np.mean(self.metrics[metric_key], axis=0)
-            for step, _ in enumerate(feature_steps):
-                metric_mean = metric_means[step]
-                ci_low, ci_hi = mlpy.bootstrap_ci(self.metrics[metric_key][:, step])
-                self.metrics[ci_metric_key][step] = np.array([metric_mean, ci_low, ci_hi])
-
-        _compute_ci_metric(self.MCC_CI, self.MCC)
-        _compute_ci_metric(self.ACC_CI, self.ACC)
-        _compute_ci_metric(self.AUC_CI, self.AUC)
-        _compute_ci_metric(self.DOR_CI, self.DOR)
-        _compute_ci_metric(self.PPV_CI, self.PPV)
-        _compute_ci_metric(self.NPV_CI, self.NPV)
-        _compute_ci_metric(self.SPEC_CI, self.SPEC)
-        _compute_ci_metric(self.SENS_CI, self.SENS)
+        # Target metrics are all those included in the CI_METRICS list.
+        for ci_key in self.CI_METRICS:
+            metric_key = getattr(self, ci_key.split('_')[0])
+            self._compute_ci_metric(feature_steps, ci_key, metric_key)
 
     @staticmethod
     def _save_metric_to_file(metric_filename, metric, columns=None, index=None):
@@ -505,7 +519,6 @@ class DAP(ABC):
         of every fold. by default, no extra operations are needed
         """
         pass
-
 
     def _extra_operations_end_experiment(self):
         """
@@ -692,12 +705,10 @@ class DAP(ABC):
 
         Returns
         -------
-        predicted_classes: array-like, shape = (n_samples, )
-            Array containing the class predictions generated by the model
-            
-        predicted_class_probs: array-like, shape = (n_samples, n_classes)
-            Array containing the prediction probabilities estimated by the model 
-            for each of the considered targets (i.e. classes)
+        predictions: array-like, shape = (n_samples, ) or tuple of array-like objects.
+            Array containing the predictions generated by the model. What is actually
+            contained in the `prediction` array-like object is strongly
+            related to the task at hand (see `_predict` method)
             
         extra_metrics:
             List of extra metrics to log during execution.
@@ -708,8 +719,8 @@ class DAP(ABC):
         model, extra_metrics = self._fit(model, X_train, y_train)
 
         X_validation = self._prepare_data(X_validation, training_data=False)
-        predicted_classes, predicted_class_probs = self._predict(model, X_validation)
-        return predicted_classes, predicted_class_probs, extra_metrics
+        predictions = self._predict(model, X_validation)
+        return predictions, extra_metrics
 
     def _prepare_data(self, X, training_data=True):
         """
@@ -834,7 +845,7 @@ class DAP(ABC):
             predicted_class_probs = model.predict_proba(X_validation)
         else:
             predicted_class_probs = None
-        return predicted_classes, predicted_class_probs
+        return (predicted_classes, predicted_class_probs)
 
     def _train_best_model(self, k_feature_indices, seed=None):
         """
@@ -861,8 +872,8 @@ class DAP(ABC):
         """
 
         # Get Best Feature Step (i.e. no. of features to use)
-        mcc_means = self.metrics[self.MCC_CI][:, 0]
-        max_index = np.argmax(mcc_means)
+        reference_metric_avg_values = self.metrics[self.DAP_REFERENCE_METRIC][:, 0]
+        max_index = np.argmax(reference_metric_avg_values)
         best_nb_features = k_feature_indices[max_index]
 
         # update contextual information
@@ -896,6 +907,7 @@ class DAP(ABC):
 
         # 4. Fit the model
         model = self.ml_model
+
         # 4.1 Prepare data
         Xs_train_fs = self._prepare_data(Xs_train_fs)
         Xs_val_fs = self._prepare_data(Xs_val_fs)
@@ -903,7 +915,6 @@ class DAP(ABC):
         y_val = self._prepare_targets(y_val)
 
         model, extra_metrics = self._fit(model, Xs_train_fs, y_train, Xs_val_fs, y_val)
-
         return model, extra_metrics
 
     # ===========================================================
@@ -928,7 +939,7 @@ class DAP(ABC):
         """
         base_output_folder = self._get_output_folder()
 
-        # Select K-features according to the resulting ranking
+        # Set the different feature-steps to be used during the CV
         k_features_indices = self._generate_feature_steps(self.experiment_data.nb_features)
 
         for runstep in range(self.cv_n):
@@ -995,11 +1006,8 @@ class DAP(ABC):
                     # 5. Fit and Predict\
                     model = self.ml_model
                     # 5.1 Train the model and generate predictions (inference)
-                    predicted_classes, predicted_class_probs, extra_metrics = self._fit_predict(model,
-                                                                                                X_train_fs, y_train,
-                                                                                                X_val_fs, y_validation)
-                    self._compute_step_metrics(validation_indices, y_validation,
-                                               predicted_classes, predicted_class_probs, **extra_metrics)
+                    predictions, extra_metrics = self._fit_predict(model, X_train_fs, y_train, X_val_fs, y_validation)
+                    self._compute_step_metrics(validation_indices, y_validation, predictions, **extra_metrics)
 
                     if verbose:
                         print("MCC: {}".format(
@@ -1049,7 +1057,139 @@ class DAP(ABC):
         X_test = self._prepare_data(X_test)
         Y = self._prepare_targets(Y_test)
 
-        predicted_classes, predicted_class_probs = self._predict(best_model, X_test)
-
-        self._compute_test_metrics(Y_test, predicted_classes, predicted_class_probs)
+        predictions = self._predict(best_model, X_test)
+        self._compute_test_metrics(Y_test, predictions)
         self._save_test_metrics_to_file(self._get_output_folder())
+
+
+class DAPRegr(DAP):
+    """Specialisation of the DAP implementation for Regression Tasks"""
+
+    EVS = 'EVS'
+    MAE = 'MAE'
+    MSE = 'MSE'
+    MedAE = 'MedAE'
+    R2 = 'R2'
+
+    EVS_CI = 'EVS_CI'
+    MAE_CI = 'MAE_CI'
+    MSE_CI = 'MSE_CI'
+    MedAE_CI = 'MedAE_CI'
+    R2_CI = 'R2_CI'
+
+    DAP_REFERENCE_METRIC = R2_CI
+
+    BASE_METRICS = [EVS, MAE, MSE, MedAE, R2]
+    CI_METRICS = [EVS_CI, MAE_CI, MedAE_CI, MSE_CI, R2_CI]
+
+    # ====== Utility Methods (Specialisation) =======
+
+    def _prepare_metrics_array(self):
+        """
+        Initialise Base "Standard" DAP Metrics to be monitored and saved during the
+        data analysis plan.
+        """
+
+        metrics_shape = (self.iteration_steps, self.feature_steps)
+        metrics = {
+            self.RANKINGS: np.empty((self.iteration_steps, self.experiment_data.nb_features), dtype=np.int),
+
+            self.EVS: np.empty(metrics_shape),
+            self.MAE: np.empty(metrics_shape),
+            self.MedAE: np.empty(metrics_shape),
+            self.R2: np.empty(metrics_shape),
+            self.PREDS: np.empty(metrics_shape + (self.experiment_data.nb_samples,), dtype=np.int),
+
+            # Confidence Interval Metrics-specific
+            # all entry are assumed to have the following structure
+            # (mean, lower_bound, upper_bound)
+            self.EVS_CI: np.empty((self.feature_steps, 3)),
+            self.MAE_CI: np.empty((self.feature_steps, 3)),
+            self.MSE_CI: np.empty((self.feature_steps, 3)),
+            self.MedAE_CI: np.empty((self.feature_steps, 3)),
+            self.R2_CI: np.empty((self.feature_steps, 3)),
+
+            # Test dictionary
+            self.TEST_SET: dict()
+        }
+        # Initialize to Flag Values
+        metrics[self.PREDS][:, :, :] = -10
+        return metrics
+
+    def _compute_step_metrics(self, validation_indices, y_true_validation,
+                              predictions, **extra_metrics):
+        """
+        Compute the "classic" DAP Step metrics for corresponding iteration-step and feature-step.
+
+        Parameters
+        ----------
+        validation_indices: array-like, shape = [n_samples]
+            Indices of validation samples
+
+        y_true_validation: array-like, shape = [n_samples]
+            Array of true targets for samples in the validation set
+
+        predictions: array-like, shape = [n_samples] or tuple of array-like objects.
+            This parameter contains what has been returned by the `_fit_predict` method.
+
+        Other Parameters
+        ----------------
+
+        extra_metrics:
+            List of extra metrics to log during execution returned by the `_fit_predict` method
+            This list will be processed separately from standard "base" metrics.
+        """
+
+        # Process predictions
+        predicted_values, _ = predictions
+
+        # Compute Base Step Metrics
+        iteration_step, feature_step = self._iteration_step_nb, self._feature_step_nb
+        self.metrics[self.PREDS][iteration_step, feature_step, validation_indices] = predicted_values
+        self.metrics[self.EVS][iteration_step, feature_step] = explained_variance_score(y_true_validation,
+                                                                                        predicted_values)
+        self.metrics[self.MAE][iteration_step, feature_step] = mean_absolute_error(y_true_validation,
+                                                                                   predicted_values)
+        self.metrics[self.MedAE][iteration_step, feature_step] = median_absolute_error(y_true_validation,
+                                                                                       predicted_values)
+        self.metrics[self.MSE][iteration_step, feature_step] = mean_squared_error(y_true_validation,
+                                                                                  predicted_values)
+        self.metrics[self.R2][iteration_step, feature_step] = r2_score(y_true_validation, predicted_values)
+
+        if extra_metrics:
+            self._compute_extra_step_metrics(validation_indices, y_true_validation, predictions, **extra_metrics)
+
+    def _compute_test_metrics(self, y_true_test, predictions, **extra_metrics):
+
+        """
+        Compute the "classic" DAP Step metrics for test data
+
+        Parameters
+        ----------
+
+        y_true_test: array-like, shape = [n_samples]
+            Array of true targets for samples in the test set
+
+        predictions: array-like, shape = [n_samples] or tuple of array-like objects.
+            This parameter contains what has been returned by the `_predict` method.
+
+        Other Parameters
+        ----------------
+
+        extra_metrics:
+            List of extra metrics to log during execution returned by the `predict` method
+            This list will be processed separately from standard "base" metrics.
+        """
+
+        # Process predictions
+        predicted_values, _ = predictions  # prediction_probabilities are not used for base metrics.
+
+        self.metrics[self.TEST_SET][self.PREDS] = predicted_values
+        self.metrics[self.TEST_SET][self.EVS] = explained_variance_score(y_true_test, predicted_values)
+        self.metrics[self.TEST_SET][self.MAE] = mean_absolute_error(y_true_test, predicted_values)
+        self.metrics[self.TEST_SET][self.MSE] = median_absolute_error(y_true_test, predicted_values)
+        self.metrics[self.TEST_SET][self.MedAE] = mean_squared_error(y_true_test, predicted_values)
+        self.metrics[self.TEST_SET][self.R2] = r2_score(y_true_test, predicted_values)
+
+        if extra_metrics:
+            self._compute_extra_test_metrics(y_true_test, predictions, **extra_metrics)
