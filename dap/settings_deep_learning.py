@@ -65,6 +65,11 @@ from keras.callbacks import EarlyStopping
 callbacks = [EarlyStopping(monitor='val_loss', patience=4,
                            min_delta=1e-06, mode='min')]
 
+# Validation split
+# ----------------
+# (Automatically ignored if `validation_data` is provided)
+validation_split = 0.0  # Default: no split
+
 # -----------------------
 # 2 Model Compile Section
 # _______________________
