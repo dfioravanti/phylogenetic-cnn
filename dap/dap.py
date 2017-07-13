@@ -29,7 +29,7 @@ class DAP(ABC):
     Provides a unified framework wherein execute the DAP.
     This is an abstract class so all all the abstract methods needs to be reimplemented
     in subclasses in order to work.
-    
+
     """
 
     # Metrics Keys
