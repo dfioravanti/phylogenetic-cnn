@@ -80,7 +80,7 @@ class PhyloDAP(DeepLearningDAP):
         for nb_filters, nb_neighbors in zip(self.nb_filters, self.phylo_neighbours):
 
             if nb_neighbors > nb_features:
-                raise Exception("More neighbors than features, " \
+                raise Exception("More neighbors than features, "
                                 "please use less neighbors or use more features")
 
             distances = euclidean_distances(conv_crd)

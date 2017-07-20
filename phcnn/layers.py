@@ -305,9 +305,6 @@ class PhyloConv1D(Conv1D):
 
         # Phylo neighbors step
         neighbor_indexes = _top_k(self.distances, k=self.nb_neighbors)
-        neighbour_idx_shape = K.int_shape(neighbor_indexes)
-        # target_neighbors = neighbor_indexes[0:self.nb_features, 0:self.nb_neighbors, :]
-        # target_neighbors._keras_shape = neighbour_idx_shape
         X_phylongb = _gather_target_neighbors(X, neighbor_indexes)
         Coord_phylongb = _gather_target_neighbors(Coord, neighbor_indexes)
 
