@@ -17,13 +17,13 @@ desease <- "CDf"
 datasets_path <- "../datasets/"
 
 coordinates_path <- paste(datasets_path, "coordinates/coordinates_", tolower(desease), ".txt", sep="")
-training_samples_path <- paste(datasets_path,"true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
+training_samples_path <- paste(datasets_path,"ibd_dataset/HS_", desease, "/Sokol_16S_taxa_HS_",
                                 desease, "_commsamp_training.txt", sep="")
-test_samples_path <- paste(datasets_path, "true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
+test_samples_path <- paste(datasets_path, "ibd_dataset/HS_", desease, "/Sokol_16S_taxa_HS_",
                            desease, "_commsamp_test.txt", sep="")
-training_target_path <- paste(datasets_path, "true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
+training_target_path <- paste(datasets_path, "ibd_dataset/HS_", desease, "/Sokol_16S_taxa_HS_",
                                desease, "_commsamp_training_lab.txt", sep="")
-test_target_path <- paste(datasets_path, "true_data/HS_", desease, "/Sokol_16S_taxa_HS_",
+test_target_path <- paste(datasets_path, "ibd_dataset/HS_", desease, "/Sokol_16S_taxa_HS_",
                            desease, "_commsamp_test_lab.txt", sep="")
 
 output_dir_path <- paste(datasets_path, "synthetic_data/HS_", desease,
