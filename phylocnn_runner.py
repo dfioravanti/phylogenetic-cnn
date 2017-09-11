@@ -7,7 +7,7 @@ import numpy as np
 from keras.backend import floatx
 from keras.engine import Input, Model
 from keras.layers import (Lambda, MaxPooling1D, Flatten,
-                          Dropout, Dense, BatchNormalization)
+                          Dropout, Dense)
 
 import pickle
 import settings
