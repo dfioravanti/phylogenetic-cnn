@@ -26,10 +26,17 @@ class PhyloDAP(DeepLearningDAP):
         self.total_nb_samples = settings.NB_SAMPLES
         self.nb_filters = to_list(settings.nb_convolutional_filters)
         self.phylo_neighbours = to_list(settings.nb_phylo_neighbours)
-        self._path_weights = os.path.join('..', 'syntetic_data_Ylenia_script', 'alpha_equal_1',
-                                          self._disease_name,
+#        self._path_weights = os.path.join('..', 'output', 'syntetic_data_ylenia_script', 'alpha_equal_1',
+#                                          self._disease_name.lower(),
+#                                        '{}_synthetic_data_10000_phylocnn_standardscaler_kbest_ranking_10_5'.
+#                                          format(self._disease_name.lower()), 'training_model.hdf5')
+        self._path_weights = os.path.join('..', 'output', 'syntetic_data_ylenia_script', 'alpha_equal_1', 
+                                          self._disease_name.lower(),
                                           '{}_synthetic_data_10000_phylocnn_standardscaler_kbest_ranking_10_5'.
-                                          format(self._disease_name), 'training_model.hdf5')
+                                          format(self._disease_name.lower()), 'training_model.hdf5')
+        
+        print('--> WEIGHT FILE: ', self._path_weights)
+        print('--> WEIGHT FILE EXISTS: ', os.path.exists(self._path_weights))
 
         self._do_serialisation = False  # Serialization does not work with our Keras layer
 
@@ -46,7 +53,7 @@ class PhyloDAP(DeepLearningDAP):
         base_filename = self._disease_name.lower()
         folder_name = '_'.join([base_filename, self.type_data, self.total_nb_samples, self.ml_model_name,
                                 self.feature_scaling_name, self.feature_ranking_name,
-                                str(self.cv_n), str(self.cv_k)])
+                                str(self.cv_n), str(self.cv_k), 'transfer'])
         output_folder_path = os.path.join(settings.OUTPUT_DIR, folder_name)
         os.makedirs(output_folder_path, exist_ok=True)
         return output_folder_path
@@ -90,16 +97,17 @@ class PhyloDAP(DeepLearningDAP):
             distances = euclidean_distances(conv_crd)
             conv_layer, conv_crd = PhyloConv1D(distances,
                                                nb_neighbors,
-                                               nb_filters, activation='selu', trainable= False)([conv_layer, conv_crd])
+                                               nb_filters, activation='selu', trainable=False)([conv_layer, conv_crd])
 
-        max = MaxPooling1D(pool_size=2, padding="valid")(conv_layer)
-        flatt = Flatten()(max)
-        drop = Dropout(0.25)(Dense(units=16, activation='selu', name='last_dense')(flatt))
+        maxp = MaxPooling1D(pool_size=2, padding="valid")(conv_layer)
+        flatt = Flatten()(maxp)
+        fc_1 = Dense(units=128, name='fc_1', activation='sigmoid')(flatt)
+        dropout = Dropout(0.25, name="dropout_l")(fc_1)
         output = Dense(units=nb_classes, kernel_initializer="he_normal",
-                       activation="softmax", name='output')(drop)
+                       activation="softmax", name='new_output')(dropout)
 
         model = Model(inputs=[data, coordinates], outputs=output)
-        model.load_weights(self._path_weights)
+        model.load_weights(self._path_weights, by_name=True)
 
         return model
 
@@ -221,6 +229,10 @@ def main():
 
     inputs = get_data(datafile, labels_datafile, coordinates_datafile,
                       test_datafile, test_label_datafile)
+
+    print('='*80)
+    print('Processing {}'.format(datafile))
+    print('='*80)
 
     dap = PhyloDAP(inputs, settings.DISEASE)
     # dap.save_configuration()
