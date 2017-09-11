@@ -1,6 +1,6 @@
 # Install MLPY 3.5.0 Dependency 
 
-`mlpy` package is required for some opetions included in the DAP procedure.
+`mlpy` package is required for some operations included in the DAP procedure.
 
 To install `mlpy` dependency, the following steps must be accomplished:
 
