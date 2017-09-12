@@ -17,11 +17,11 @@ DISEASE = 'CDf'
 
 # two type of data avaiable: true_data or synthetic_data
 
-TRUE_DATA = 'true_data'
-SYNT_DATA = 'synthetic_data'
+IBD_DATA = 'ibd_dataset'
+SYNT_DATA = 'synthetic_dataset'
 
 # Choose one of the above!
-TYPE_DATA = TRUE_DATA
+TYPE_DATA = IBD_DATA
 
 # This can be empty, if so the datasets will be located in HD_DISEASE/
 # instead of HD_DISEASE/NB_SAMPLES
@@ -30,7 +30,7 @@ NB_SAMPLES = '10000'
 COORDINATES_FILEPATH = os.path.join(DATA_DIR, 'coordinates',
                                     ''.join(['coordinates_', DISEASE.lower(), '.txt']))
 
-if TYPE_DATA in (TRUE_DATA, SYNT_DATA):
+if TYPE_DATA in (IBD_DATA, SYNT_DATA):
 
     if TYPE_DATA == SYNT_DATA:
         DISEASE_FOLDER = os.path.join(''.join(['HS_', DISEASE]), NB_SAMPLES)
