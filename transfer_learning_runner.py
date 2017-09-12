@@ -26,18 +26,9 @@ class PhyloDAP(DeepLearningDAP):
         self.total_nb_samples = settings.NB_SAMPLES
         self.nb_filters = to_list(settings.nb_convolutional_filters)
         self.phylo_neighbours = to_list(settings.nb_phylo_neighbours)
-#        self._path_weights = os.path.join('..', 'output', 'syntetic_data_ylenia_script', 'alpha_equal_1',
-#                                          self._disease_name.lower(),
-#                                        '{}_synthetic_data_10000_phylocnn_standardscaler_kbest_ranking_10_5'.
-#                                          format(self._disease_name.lower()), 'training_model.hdf5')
-        self._path_weights = os.path.join('..', 'output', 'syntetic_data_ylenia_script', 'alpha_equal_1', 
-                                          self._disease_name.lower(),
-                                          '{}_synthetic_data_10000_phylocnn_standardscaler_kbest_ranking_10_5'.
-                                          format(self._disease_name.lower()), 'training_model.hdf5')
+        self._path_weights = os.path.join(os.path.abspath(os.path.curdir), 'weights', 
+                                          '{}_training_weights.hdf5'.format(self._disease_name.lower()))
         
-        print('--> WEIGHT FILE: ', self._path_weights)
-        print('--> WEIGHT FILE EXISTS: ', os.path.exists(self._path_weights))
-
         self._do_serialisation = False  # Serialization does not work with our Keras layer
 
     # ==== Abstract Methods Implementation ====
