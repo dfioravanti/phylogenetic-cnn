@@ -9,9 +9,7 @@ These instructions will get you a copy of the project up and running on your loc
 
 ## Clone this repo
 
-    ```
-    git clone https://gitlab.fbk.eu/MPBA/phylogenetic-cnn.git
-    ``` 
+    git clone https://gitlab.fbk.eu/MPBA/phylogenetic-cnn.git 
     
 The DAP (Data Analysis Protocol) Project is included in this repo as an external reference (i.e. *Git Submodule*).
 
@@ -19,11 +17,11 @@ Therefore, the first time this repo is cloned, the Git Submodule must be initial
 you should see a `dap` directory in your cloned copy which is empty. 
 
 Thus:
-
-* `cd dap`
-* `git submodule init`
-* `git submodule update`
-
+    
+    cd dap
+    git submodule init
+    git submodule update
+    
 #### Alternatively:
 
 You could do the same operations in just one line:
