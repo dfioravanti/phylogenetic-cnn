@@ -39,6 +39,13 @@ will execute the phylogenetic convolutional neural network on the selected data 
 |   ucf   | [IBD data](https://drive.google.com/open?id=0B5ihbogwrsACYWVEOHZzVWZzM1k) | [IBD results](https://drive.google.com/open?id=0BwWtRh6l0dHGYUc2cng5OUpKTk0) | [Synthetic data](https://drive.google.com/open?id=0B5ihbogwrsACOW5rNjAxX1pQbUE) | [Synthetic results](https://drive.google.com/open?id=0BwWtRh6l0dHGX1RNNWhWM1RsREU) |
 |   ucr   | [IBD data](https://drive.google.com/open?id=0B5ihbogwrsACRFpwQTVYa1h1ekE) | [IBD results](https://drive.google.com/open?id=0BwWtRh6l0dHGZEJ0eTVEem1QR28) | [Synthetic data](https://drive.google.com/open?id=0B5ihbogwrsACc25OclVvald0N28) | [Synthetic results](https://drive.google.com/open?id=0BwWtRh6l0dHGaWFVbUg0Wm9WNFU) |
 
+## Notebooks
+
+The folder `notebook` contains some notebook that will make it clearer how the program works.
+
+* PhyloConv1D: Explanation of how to use the PhyloConv1D layer
+* Embedding_ICDF: TODO
+
 ## Authors
 
 * Valerio Maggio - [website]()
