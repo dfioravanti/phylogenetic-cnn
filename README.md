@@ -68,10 +68,10 @@ In order to configure how the program runs one needs to modify the following fil
 
 ## Notebooks
 
-* PhyloConv1D: In this notebook we report code examples and explanations on how to use the new PhyloConv1D Keras layer.
+* [PhyloConv1D](notebooks/PhyloConv1D.ipynb): In this notebook we report code examples and explanations on how to use the new PhyloConv1D Keras layer.
 We use experimental data, as examples.
 
-* Embedding_ICDF: In this notebook we report results and plots of embeddings of Phylo-Convolutional Layers 
+* [Embedding - ICDf data](notebooks/Embedding_ICDF.ipynb): In this notebook we report results and plots of embeddings of Phylo-Convolutional Layers 
 calculated on data of ICDf disease included in the IBD dataset, as reported in the paper.
 
 ## Authors
