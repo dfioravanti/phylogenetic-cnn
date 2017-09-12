@@ -16,18 +16,23 @@ A complete conda environment is provided as a yml file in the folder `envs`. Add
 
 ## Running the program
 
-In order to run the program one needs to modify the following files:
+### Runners
+
+One can select the algormthm (SVM, random forrest, MLP, ph-cnn) to be used by simply decide which runner to execute. 
+
+* `multilayerperceptron_runner.py`: Multi-Layer Preception
+* `phylocnn_runner.py`: Phylogenetic Convolutional Neural Network
+* `randomforest_runner.py`: Random forest
+* `svm_runner.py`: Support Vector Machine
+* `transfer_learning_runner.py`: Phylogenetic Convolutional Neural Network used for tranfer learning. It assumes that pretrained network weights are provided.
+
+### Settings
+
+In order to configure how the program runs one needs to modify the following files:
 
 * `settings.py` - where it can be chose which type of data we want to load, where are the data, where to output, etc...
 * `dap/settings.py` - where it can be set how the DAP is supposed to operate. More informations are available in the readme in the `dap` folder and in the paper.
 * `dap/deep_learning_settings.py` - where all the settings specific for deep learning can be set.
-
-Once done that one can select the algormthm (SVM, random forrest, MLP, ph-cnn) to be used by simply decide which runner to execute. For example:
-
-```
-python3 phylocnn_runner.py
-```
-will execute the phylogenetic convolutional neural network on the selected data with the selected settings.
 
 ## Replication
 | disease |                                                                           |                                                                              |                                                                                 |                                                                                    |
