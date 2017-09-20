@@ -16,6 +16,7 @@ In more details, these are the steps to follow:
 	```
         tar xvzf mlpy-3.5.0.tar.gz
         cd mlpy-3.5.0
+        python setup.py build
         python setup.py install
         ```
 
