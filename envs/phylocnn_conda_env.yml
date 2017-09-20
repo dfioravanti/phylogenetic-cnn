@@ -1,4 +1,4 @@
-me: phylocnn
+name: phylocnn
 channels:
 - defaults
 dependencies:
