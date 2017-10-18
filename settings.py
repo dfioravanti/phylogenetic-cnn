@@ -13,41 +13,27 @@ OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 # -- DATA Section
 # ============================================
 
-DISEASE = 'CDf'
+DATABASE_NAME = 'camda'
 
-# two type of data avaiable: true_data or synthetic_data
+TRAINING_PREFIX = 'TR'
+TEST_PREFIX = 'TS'
 
-IBD_DATA = 'ibd_dataset'
-SYNT_DATA = 'synthetic_dataset'
+TRAINING_COORDINATES_FILEPATH = os.path.join(DATA_DIR, 'coordinates', DATABASE_NAME,
+                                    ''.join(['MDSmat', TRAINING_PREFIX, '.txt']))
 
-# Choose one of the above!
-TYPE_DATA = IBD_DATA
+TEST_COORDINATES_FILEPATH = os.path.join(DATA_DIR, 'coordinates', DATABASE_NAME,
+                                    ''.join(['MDSmat', TEST_PREFIX, '.txt']))
 
-# This can be empty, if so the datasets will be located in HD_DISEASE/
-# instead of HD_DISEASE/NB_SAMPLES
-NB_SAMPLES = '10000'
+TRAINING_DATA_FILEPATH = os.path.join(DATA_DIR, 'expressions', DATABASE_NAME, 
+				      ''.join(['dataExpr', TRAINING_PREFIX, '.txt']))
+TRAINING_LABELS_FILEPATH = os.path.join(DATA_DIR, 'expressions', DATABASE_NAME, 
+                                        ''.join(['dataExpr', TRAINING_PREFIX, '_labels.txt']))
 
-COORDINATES_FILEPATH = os.path.join(DATA_DIR, 'coordinates',
-                                    ''.join(['coordinates_', DISEASE.lower(), '.txt']))
 
-if TYPE_DATA in (IBD_DATA, SYNT_DATA):
-
-    if TYPE_DATA == SYNT_DATA:
-        DISEASE_FOLDER = os.path.join(''.join(['HS_', DISEASE]), NB_SAMPLES)
-    else:
-        DISEASE_FOLDER = ''.join(['HS_', DISEASE])
-
-    TRAINING_DATA_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, DISEASE_FOLDER,
-                                          ''.join(['Sokol_16S_taxa_HS_', DISEASE, '_commsamp_training.txt']))
-    TRAINING_LABELS_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, DISEASE_FOLDER,
-                                            ''.join(['Sokol_16S_taxa_HS_', DISEASE, '_commsamp_training_lab.txt']))
-
-    TEST_DATA_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, DISEASE_FOLDER,
-                                      ''.join(['Sokol_16S_taxa_HS_', DISEASE, '_commsamp_test.txt']))
-    TEST_LABELS_FILEPATH = os.path.join(DATA_DIR, TYPE_DATA, DISEASE_FOLDER,
-                                        ''.join(['Sokol_16S_taxa_HS_', DISEASE, '_commsamp_test_lab.txt']))
-else:
-    raise Exception("Select a correct type of data")
+TEST_DATA_FILEPATH = os.path.join(DATA_DIR, 'expressions', DATABASE_NAME, 
+                                  ''.join(['dataExpr', TEST_PREFIX, '.txt']))
+TEST_LABELS_FILEPATH = os.path.join(DATA_DIR, 'expressions', DATABASE_NAME, 
+                                    ''.join(['dataExpr', TEST_PREFIX, '_labels.txt']))
 
 # =======================================
 # Multi-Layer Perceptron Specific Section

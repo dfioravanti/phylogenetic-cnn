@@ -4,7 +4,7 @@ from sklearn.datasets.base import Bunch
 
 
 def get_data(datafile, labels_datafile, coordinates_datafile,
-             test_datafile, test_label_datafile):
+             test_datafile, test_label_datafile, test_coordinates_datafile):
     """   
     :param datafile: the first row contains the names of the features,
                      the first column contains the names for the samples,
@@ -15,6 +15,7 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
                                the remaining entries are the coordinates
     :param test_datafile: same structure as datafile, but it contains the test data
     :param test_label_datafile: same structure as labels_test_datafile, but it contains the test labels
+    :param ....
     :return: A Bunch with all the data required by phcnn
     
     """
@@ -24,16 +25,23 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
 
     _, _, Xs_test = load_datafile(test_datafile)
     ys_test = np.loadtxt(test_label_datafile, dtype=np.int)
+    
     _, coordinate_names, coordinates = load_datafile(coordinates_datafile)
+    _, test_coordinate_names, test_coordinates = load_datafile(test_coordinates_datafile)
 
     # Keras needs that all the batch sizes are the same. And it is impossible at the
     # moment to pass a variable tot the model. Since coordinates is batch independent
     # we need to expand it to match the shape of Xs but only the first "face" of coordinates
     # is actually used all the rest is basically just pudding. This is a huge waste of memory but is
     # the least worse solution we found.
-    all_coordinates = np.empty((Xs.shape[0],) + coordinates.shape, dtype=np.float64)
-    for i in range(Xs.shape[0]):
-        all_coordinates[i] = coordinates
+    # all_coordinates = np.empty((Xs.shape[0],) + coordinates.shape, dtype=np.float64)
+    # for i in range(Xs.shape[0]):
+    #     all_coordinates[i] = coordinates
+    #
+    # all_test_coordinates = np.empty((Xs_test.shape[0],) + test_coordinates.shape, dtype=np.float64)
+    # for i in range(Xs_test.shape[0]):
+    #     all_test_coordinates[i] = test_coordinates
+
 
     inputs = Bunch()
     inputs.feature_names = feature_names
@@ -43,7 +51,9 @@ def get_data(datafile, labels_datafile, coordinates_datafile,
     inputs.test_data = Xs_test
     inputs.test_targets = ys_test
     inputs.coordinate_names = coordinate_names
-    inputs.coordinates = all_coordinates
+    inputs.coordinates = coordinates.T
+    inputs.test_coordinates = test_coordinates.T
+    inputs.test_coordinate_names = test_coordinate_names
     inputs.nb_samples = Xs.shape[0]
     inputs.nb_features = Xs.shape[1]
     inputs.nb_coordinates = coordinates.shape[0]

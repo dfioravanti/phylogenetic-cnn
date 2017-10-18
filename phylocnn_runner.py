@@ -15,15 +15,15 @@ from dap.deep_learning_dap import DeepLearningDAP
 from phcnn.layers import PhyloConv1D, euclidean_distances
 from utils import get_data, to_list
 
+from keras import backend as K
+
 
 class PhyloDAP(DeepLearningDAP):
     """Specialisation of the DAP for DNN using PhyloCNN layers"""
 
-    def __init__(self, experiment, target_disease):
+    def __init__(self, experiment, dbname):
         super(PhyloDAP, self).__init__(experiment=experiment)
-        self._disease_name = target_disease
-        self.type_data = settings.TYPE_DATA
-        self.total_nb_samples = settings.NB_SAMPLES
+        self.db_name = dbname
         self.nb_filters = to_list(settings.nb_convolutional_filters)
         self.phylo_neighbours = to_list(settings.nb_phylo_neighbours)
 
@@ -39,8 +39,8 @@ class PhyloDAP(DeepLearningDAP):
         """
         Compose path to the folder where reports and metrics will be saved.
         """
-        base_filename = self._disease_name.lower()
-        folder_name = '_'.join([base_filename, self.type_data, self.total_nb_samples, self.ml_model_name,
+        base_filename = self.db_name.lower()
+        folder_name = '_'.join([base_filename, self.ml_model_name,
                                 self.feature_scaling_name, self.feature_ranking_name,
                                 str(self.cv_n), str(self.cv_k)])
         output_folder_path = os.path.join(settings.OUTPUT_DIR, folder_name)
@@ -57,26 +57,23 @@ class PhyloDAP(DeepLearningDAP):
             PhyloCNN model
         """
 
+        def coords(X):
+            return [X, K.in_train_phase(K.variable(self._C_fs_train, dtype=K.floatx()),
+                                        K.variable(self._C_fs_test, dtype=K.floatx()))]
+
         # Parameters for Input Layers
         nb_features = self._nb_features  # current nb of features in the feature step!
-        nb_coordinates = self.experiment_data.nb_coordinates
 
-        # Paramenters for phylo_conv layers
-        list_filters = self.nb_filters
-        list_neighbours = self.phylo_neighbours
+        #  Paramenters for phylo_conv layers
 
         # Parameter for output layer
         nb_classes = self.experiment_data.nb_classes
 
         data = Input(shape=(nb_features, 1), name="data", dtype=floatx())
-        coordinates = Input(shape=(nb_coordinates, nb_features, 1),
-                            name="coordinates", dtype=floatx())
-
-        conv_layer = data
-
         # We remove the padding that we added to work around keras limitations
-        conv_crd = Lambda(lambda c: c[0], output_shape=lambda s: (s[1:]))(coordinates)
+        x, conv_crd = Lambda(coords)(data)
 
+        conv_layer = x
         for nb_filters, nb_neighbors in zip(self.nb_filters, self.phylo_neighbours):
 
             if nb_neighbors > nb_features:
@@ -94,7 +91,7 @@ class PhyloDAP(DeepLearningDAP):
         output = Dense(units=nb_classes, kernel_initializer="he_normal",
                        activation="softmax", name='output')(drop)
 
-        model = Model(inputs=[data, coordinates], outputs=output)
+        model = Model(inputs=data, outputs=output)
         return model
 
     @staticmethod
@@ -110,11 +107,13 @@ class PhyloDAP(DeepLearningDAP):
         Add set of coordinates to default training data
         """
         super(PhyloDAP, self)._set_training_data()
-        self.C = self.experiment_data.coordinates
+        self.C_train = self.experiment_data.coordinates
+        self.C_train = np.expand_dims(self.C_train, 3)
 
     def _set_test_data(self):
         super(PhyloDAP, self)._set_test_data()
-        self.C = self.experiment_data.coordinates
+        self.C_test = self.experiment_data.test_coordinates
+        self.C_test = np.expand_dims(self.C_test, 3)
 
     def _select_ranked_features(self, ranked_feature_indices, X_train, X_validation=None):
         """
@@ -143,17 +142,37 @@ class PhyloDAP(DeepLearningDAP):
 
         # Store new attributes referring to set of coordinates in feature steps.
         # i.e. `self._C_fs`
-        self._C_fs_train = self.C[..., ranked_feature_indices]
-        if X_validation is not None:
-            self._C_fs_val = self.C[..., ranked_feature_indices]
+        self._C_fs_train = self.C_train[:, ranked_feature_indices, :]
+        self._C_fs_test = self.C_test[:, ranked_feature_indices, :]
         return super(PhyloDAP, self)._select_ranked_features(ranked_feature_indices, X_train, X_validation)
 
-    @staticmethod
-    def _adjust_dimensions(X, Coord):
-        """
-        Utility method used for input data preparation.
-        """
-        return np.expand_dims(X, 3), np.expand_dims(Coord, 4)
+    # def predict_on_test(self, best_model):
+    #     """
+    #     Execute the last step of the DAP. A prediction using the best model
+    #     trained in the main loop and the best number of features.
+    #
+    #     Parameters
+    #     ----------
+    #     best_model
+    #         The best model trained by the run() method
+    #     """
+    #
+    #     self._set_test_data()
+    #     X_test = self.X_test
+    #     Y_test = self.y_test
+    #
+    #     if self.apply_feature_scaling:
+    #         _, X_test = self._apply_scaling(self.X, self.X_test)
+    #
+    #     # Select the correct features and prepare the data before predict
+    #     feature_ranking = self._best_feature_ranking[:self._nb_features]
+    #     X_test = self._select_ranked_features(feature_ranking, X_test)
+    #     X_test = self._prepare_data(X_test, learning_phase=False)
+    #     Y_test = self._prepare_targets(Y_test)
+    #
+    #     predictions = self._predict(best_model, X_test)
+    #     self._compute_test_metrics(Y_test, predictions)
+    #     self._save_test_metrics_to_file(self._get_output_folder())
 
     def _prepare_data(self, X, training_data=True):
         """
@@ -182,14 +201,8 @@ class PhyloDAP(DeepLearningDAP):
 
         # Filter sample shapes on coordinates to match expected shapes
         # in Input Tensors
-
-        samples_in_batch = X.shape[0]
-        if training_data:
-            C_fs = self._C_fs_train[:samples_in_batch]
-        else:
-            C_fs = self._C_fs_val[:samples_in_batch]
-        X, C_fs = self._adjust_dimensions(X, C_fs)
-        return [X, C_fs]
+        X = np.expand_dims(X, 3)
+        return X
 
     def run(self, verbose=False):
         if len(self.nb_filters) != len(self.phylo_neighbours):
@@ -210,14 +223,15 @@ def main():
 
     datafile = settings.TRAINING_DATA_FILEPATH
     labels_datafile = settings.TRAINING_LABELS_FILEPATH
-    coordinates_datafile = settings.COORDINATES_FILEPATH
+    coordinates_datafile = settings.TRAINING_COORDINATES_FILEPATH
     test_datafile = settings.TEST_DATA_FILEPATH
     test_label_datafile = settings.TEST_LABELS_FILEPATH
+    test_coordinates_datafile = settings.TEST_COORDINATES_FILEPATH
 
     inputs = get_data(datafile, labels_datafile, coordinates_datafile,
-                      test_datafile, test_label_datafile)
+                      test_datafile, test_label_datafile, test_coordinates_datafile)
 
-    dap = PhyloDAP(inputs, settings.DISEASE)
+    dap = PhyloDAP(inputs, settings.DATABASE_NAME)
     # dap.save_configuration()
     trained_model = dap.run(verbose=True)
     dap.predict_on_test(trained_model)
